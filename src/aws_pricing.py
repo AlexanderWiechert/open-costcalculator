@@ -67,7 +67,7 @@ def main():
             "Value": filters_cfg["operating_system"]
         })
 
-    # Der Pricing-Client läuft immer in us-east-1, da AWS Pricing API zentral dort ist.
+    # Der Pricing-Client läuft immer in us-east-1, da der Pricing-Service dort zentral ist.
     client = boto3.client('pricing', region_name='us-east-1')
     response = client.get_products(
         ServiceCode=service_code,
@@ -75,11 +75,7 @@ def main():
         MaxResults=100
     )
 
-    # Debug: Ganze API-Antwort ausgeben
-    print("DEBUG: API-Antwort:")
-    print(json.dumps(response, indent=2))
-
-    # Ausgabe jedes Preisdatenobjekts mit hinzugefügtem Region-Code
+    # Entferne den Debug-Output, damit nur gültiges JSON ausgegeben wird.
     for priceItem in response['PriceList']:
         item = json.loads(priceItem)
         item['region_code'] = region_code
