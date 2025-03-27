@@ -4,7 +4,7 @@ FROM python:3.9-slim AS base
 WORKDIR /app
 
 # Installiere jq und andere System-Dependencies
-RUN apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y jq nano && rm -rf /var/lib/apt/lists/*
 
 # Installiere Python-Abhängigkeiten
 RUN pip install boto3 pyyaml
@@ -15,7 +15,7 @@ FROM base
 WORKDIR /app
 
 # Kopiere den Anwendungscode in den Container
-COPY src/aws_pricing.py /app/aws_pricing.py
+COPY src/ /app/
 COPY entrypoint.sh /app/entrypoint.sh
 COPY config.yml /app/config.yml
 
