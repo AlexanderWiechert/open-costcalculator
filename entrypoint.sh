@@ -1,10 +1,9 @@
 #!/bin/sh
 python aws_pricing.py | jq -s -r '
-  "Instance\tPrice Category\tOS\tPrice (USD/Hr)\tDescription\tEffective Date",
+  "Region\tInstance\tPrice Category\tOS\tPrice (USD/Hr)\tDescription\tEffective Date",
   (
     .[] as $root
     | (
-        # Wir betrachten nur OnDemand
         ["OnDemand"][] as $termType
         | if ($root.terms[$termType]) then
             $root.terms[$termType] | to_entries[]
@@ -12,6 +11,7 @@ python aws_pricing.py | jq -s -r '
             | (
                 $entry.value.priceDimensions | to_entries[0] as $pd
                 | {
+                    region: $root.region_code,
                     instance: $root.product.attributes.instanceType,
                     priceCategory: $termType,
                     os: $root.product.attributes.operatingSystem,
@@ -22,16 +22,13 @@ python aws_pricing.py | jq -s -r '
             )
          else empty end
     )
-    # Nur Einträge mit "On Demand" (aber nicht "Unused Reservation" oder "$0.00 per Reservation")
     | select(
          (.description | test("On Demand")
           and (test("Unused Reservation") | not)
           and (test("\\$0\\.00 per Reservation") | not)
-          and (test("Linux with SQL") |not ))
+          and (test("Linux with SQL") | not ))
          and (.os == "Linux")
        )
-    # Falls mehrfach vorhanden, nehmen wir den ersten eindeutigen Eintrag
-#    | unique_by(.description)
-    | "\(.instance)\t\(.priceCategory)\t\(.os)\t\(.price)\t\(.description)\t\(.effectiveDate)"
+    | "\(.region)\t\(.instance)\t\(.priceCategory)\t\(.os)\t\(.price)\t\(.description)\t\(.effectiveDate)"
   )
 '

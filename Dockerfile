@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
 
 # Installiere Python-Abhängigkeiten
-RUN pip install boto3
+RUN pip install boto3 pyyaml
 
 # Stage 2: Finales Image – Kopiere nur den Anwendungscode
 FROM base
@@ -17,6 +17,7 @@ WORKDIR /app
 # Kopiere den Anwendungscode in den Container
 COPY src/aws_pricing.py /app/aws_pricing.py
 COPY entrypoint.sh /app/entrypoint.sh
+COPY config.yml /app/config.yml
 
 # Mache das Entrypoint-Skript ausführbar
 RUN chmod +x /app/entrypoint.sh

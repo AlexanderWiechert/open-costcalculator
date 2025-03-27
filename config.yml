@@ -1,0 +1,7 @@
+version: "0.1"
+pricing:
+  service_code: "AmazonEC2"
+  region: "us-east-1"
+  filters:
+    instance_type: "t2.micro"
+    operating_system: "Linux"
