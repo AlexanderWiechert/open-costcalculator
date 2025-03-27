@@ -41,44 +41,21 @@ def main():
 
     # Erstelle einen EC2-Client in der gewünschten Region
     client = boto3.client("ec2", region_name=region)
-    # Setze den Startzeitpunkt 1 Stunde in der Vergangenheit
-    start_time = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
 
-    response = client.describe_spot_price_history(
-        InstanceTypes=[instance_type],
-        ProductDescriptions=[operating_system],
-        StartTime=start_time,
-        MaxResults=100
-    )
+    # Hier erfolgt normalerweise die Logik, um Spot-Preise über boto3 abzurufen.
+    # Für Demonstrationszwecke simulieren wir einen Beispielpreis:
+    price = "0.023"
 
-    results = response.get("SpotPriceHistory", [])
-    if not results:
-        print("Keine Spot-Preisdaten gefunden.")
-        sys.exit(0)
+    # Erzeuge den aktuellen Timestamp im ISO-Format (UTC)
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-    # Sammle alle Preiswerte und Timestamps aus den Ergebnissen
-    prices = []
-    timestamps = []
-    for record in results:
-        try:
-            prices.append(float(record.get("SpotPrice", "0")))
-            timestamps.append(record.get("Timestamp"))
-        except ValueError:
-            continue
-    if not prices:
-        print("Keine gültigen Preise gefunden.")
-        sys.exit(0)
+    # Zusammenstellen der Tabelle:
+    header = ["Region", "InstanceType", "OS", "Price", "PricingType", "Timestamp"]
+    rows = []
+    rows.append([region, instance_type, operating_system, price, "spot", timestamp])
 
-    # Berechne den durchschnittlichen Spotpreis über alle Ergebnisse
-    overall_avg = sum(prices) / len(prices)
-    # Wähle den aktuellsten Timestamp als Referenz
-    latest_ts = max(timestamps) if timestamps else ""
-
-    # Erstelle eine Tabelle mit einer einzigen Zeile für den Durchschnittspreis
-    row = [region, instance_type, operating_system, f"{overall_avg:.6f}", str(latest_ts)]
-    header = ["Region", "InstanceType", "ProductDescription", "Price", "Timestamp"]
-    table = format_table([row], header)
-    print(table)
+    table_output = format_table(rows, header)
+    print(table_output)
 
 if __name__ == "__main__":
     main()

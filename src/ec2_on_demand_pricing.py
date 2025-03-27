@@ -2,6 +2,7 @@ import boto3
 import yaml
 import sys
 import json
+import datetime
 
 # Mapping von Region-Codes zu AWS Pricing "location"-Werten
 REGION_MAPPING = {
@@ -37,6 +38,21 @@ def load_config(path="config.yml"):
         print(f"Fehler beim Laden der Konfiguration: {e}", file=sys.stderr)
         sys.exit(1)
 
+def format_table(rows, header):
+    # Berechne die maximale Spaltenbreite (inklusive Header)
+    col_widths = [max(len(str(val)) for val in col) for col in zip(header, *rows)]
+
+    def format_row(row):
+        return "  ".join(str(val).ljust(width) for val, width in zip(row, col_widths))
+
+    table_lines = []
+    table_lines.append(format_row(header))
+    table_lines.append("-" * (sum(col_widths) + 2 * (len(col_widths) - 1)))
+    for row in rows:
+        table_lines.append(format_row(row))
+
+    return "\n".join(table_lines)
+
 def main():
     config = load_config()
 
@@ -67,7 +83,7 @@ def main():
             "Value": filters_cfg["operating_system"]
         })
 
-    # Der Pricing-Client läuft immer in us-east-1, da der Pricing-Service dort zentral ist.
+    # Der Pricing-Client läuft in us-east-1, da der Pricing-Service zentral dort betrieben wird.
     client = boto3.client('pricing', region_name='us-east-1')
     response = client.get_products(
         ServiceCode=service_code,
@@ -75,11 +91,50 @@ def main():
         MaxResults=100
     )
 
-    # Entferne den Debug-Output, damit nur gültiges JSON ausgegeben wird.
+    header = ["Region", "InstanceType", "OS", "Price", "PricingType", "Timestamp"]
+    rows = []
+    current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
     for priceItem in response['PriceList']:
         item = json.loads(priceItem)
-        item['region_code'] = region_code
-        print(json.dumps(item))
+
+        # Filter: Überspringe Einträge, die Reserved-Angebote enthalten.
+        if "Reserved" in item.get("terms", {}):
+            continue
+
+        product_attributes = item.get("product", {}).get("attributes", {})
+
+        # Filter: Überspringe Einträge, bei denen preInstalledSw "SQL" enthält.
+        pre_installed = product_attributes.get("preInstalledSw", "")
+        if "SQL" in pre_installed:
+            continue
+
+        # Filter: Nur Einträge mit "UnusedCapacityReservation" im capacitystatus beibehalten.
+        capacity_status = product_attributes.get("capacitystatus", "")
+        if capacity_status != "UnusedCapacityReservation":
+            continue
+
+        # Hole die relevanten Werte
+        instance_type = product_attributes.get("instanceType", "n/a")
+        operating_system = product_attributes.get("operatingSystem", "n/a")
+
+        # Extrahiere den Preis aus dem ersten OnDemand-Preis-Dimension-Eintrag
+        on_demand_terms = item.get("terms", {}).get("OnDemand", {})
+        price_value = None
+        for term_key, term_value in on_demand_terms.items():
+            price_dimensions = term_value.get("priceDimensions", {})
+            for pd_key, pd_value in price_dimensions.items():
+                price_value = pd_value.get("pricePerUnit", {}).get("USD", "n/a")
+                break
+            if price_value is not None:
+                break
+        if price_value is None:
+            price_value = "n/a"
+
+        rows.append([region_code, instance_type, operating_system, price_value, "on_demand", current_timestamp])
+
+    table_output = format_table(rows, header)
+    print(table_output)
 
 if __name__ == "__main__":
     main()
