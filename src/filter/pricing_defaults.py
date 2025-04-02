@@ -1,12 +1,26 @@
-# Zentrale Preisdefinitionen für AWS-Services (OnDemand)
-CONTROL_PLANE_STANDARD_RATE = 0.10      # bis 14 Monate nach Release
-CONTROL_PLANE_EXTENDED_RATE = 0.60      # 15–26 Monate nach Release
+# pricing_defaults.py
+# Enthält Standardkostenwerte für AWS-Komponenten
 
-# EBS Preis pro GB/Monat
-AMAZON_EBS = 0.08  # entspricht $0.08 pro GB/Monat (gp3)
+# EKS Control Plane Pricing (https://aws.amazon.com/eks/pricing/)
+CONTROL_PLANE_STANDARD_RATE = 0.10  # USD/h bei < 15 Monate alt
+CONTROL_PLANE_EXTENDED_RATE = 0.60  # USD/h bei > 14 Monate alt
 
-FARGATE_VCPU_RATE = 0.04048             # pro vCPU-Stunde
-FARGATE_RAM_RATE = 0.004445             # pro GB-RAM-Stunde
-FARGATE_DEFAULT_VCPU = 0.25             # Default pro Pod
-FARGATE_DEFAULT_RAM_GB = 0.5            # Default pro Pod
-FARGATE_DEFAULT_PODS = 2                # geschätzte Anzahl pro Cluster
+# Fargate (https://aws.amazon.com/fargate/pricing/)
+FARGATE_VCPU_RATE = 0.04048     # USD pro vCPU/h
+FARGATE_RAM_RATE = 0.004445     # USD pro GB/h
+FARGATE_DEFAULT_VCPU = 0.25     # Standardwert
+FARGATE_DEFAULT_RAM_GB = 0.5    # Standardwert
+FARGATE_DEFAULT_PODS = 2        # Annahme: 2 Pods
+
+# EBS
+AMAZON_EBS = 0.08  # USD/GB Monatlich (gp3)
+
+# ALB (https://aws.amazon.com/elasticloadbalancing/pricing/)
+ALB_HOURLY_RATE = 0.0225        # USD/h für Betrieb
+ALB_LCU_RATE = 0.008            # USD/LCU/h
+ALB_ASSUMED_LCU = 1.0           # Annahme für typische Last
+
+# Hinweis: Man kann theoretisch in einem fortgeschrittenen Szenario
+# Metriken wie ActiveConnectionCount etc. über boto3 und CloudWatch
+# abfragen und daraus LCU bestimmen. Aber das ist nicht mehr rein
+# terraform-basiert, sondern eine Live-Auswertung.

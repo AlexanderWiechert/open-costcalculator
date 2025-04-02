@@ -67,6 +67,15 @@ def calculate_fargate_cost(hours):
     return round(total_per_pod * pricing_defaults.FARGATE_DEFAULT_PODS, 5)
 
 
+def detect_alb_from_controller(plan):
+    for res in plan.get("resource_changes", []):
+        if res.get("type") == "helm_release":
+            chart = res.get("change", {}).get("after", {}).get("chart", "")
+            if "aws-load-balancer-controller" in chart:
+                return True
+    return False
+
+
 def get_ec2_price(pricing_client, filters):
     try:
         response = pricing_client.get_products(
@@ -175,6 +184,12 @@ def main():
             f"${fargate_cost:.5f}"
         ])
         total_cost += fargate_cost
+
+    # ALB (angenommen durch Helm Chart)
+    if detect_alb_from_controller(plan):
+        alb_cost = round((pricing_defaults.ALB_HOURLY_RATE + pricing_defaults.ALB_LCU_RATE * pricing_defaults.ALB_ASSUMED_LCU) * HOURS_PER_MONTH, 5)
+        table.append(["ALB (geschätzt)", 1, f"{pricing_defaults.ALB_ASSUMED_LCU} LCU", f"${alb_cost:.5f}"])
+        total_cost += alb_cost
 
     print("\n📊 EKS Kostenübersicht (pro Monat)")
     print(tabulate(table, headers=["Komponente", "Anzahl", "Typ", "Kosten"], tablefmt="github"))
