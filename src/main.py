@@ -7,7 +7,7 @@ from tabulate import tabulate
 
 from filter import ec2_filters, ebs_filters, nodegroup_meta, cluster_meta, eks_pricing_meta, pricing_defaults, duration_meta
 
-TF_PLAN_FILE = "../terraform-faregate.plan.json"
+TF_PLAN_FILE = "../terraform-loadbalancer.plan.json"
 IGNORED_PREFIXES = ["aws_iam_", "aws_network_acl", "aws_vpc", "aws_subnet", "aws_route", "aws_default_", "aws_internet_gateway"]
 IGNORED_RESOURCE_TYPES = ["null_resource", "local_file", "random_", "external"]
 
