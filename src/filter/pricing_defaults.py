@@ -15,6 +15,13 @@ FARGATE_DEFAULT_PODS = 2        # Annahme: 2 Pods
 # EBS
 AMAZON_EBS = 0.08  # USD/GB Monatlich (gp3)
 
+# RDS-Storagepreise nach Typ
+EBS_STORAGE_PRICING = {
+    "gp2": 0.115,
+    "gp3": 0.08,
+    "io1": 0.125
+}
+
 # ALB (https://aws.amazon.com/elasticloadbalancing/pricing/)
 ALB_HOURLY_RATE = 0.0225        # USD/h für Betrieb
 ALB_LCU_RATE = 0.008            # USD/LCU/h

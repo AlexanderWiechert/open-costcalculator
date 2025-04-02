@@ -7,9 +7,9 @@ from tabulate import tabulate
 import sys
 from pathlib import Path
 
-from filter import ec2_filters, ebs_filters, nodegroup_meta, cluster_meta, eks_pricing_meta, pricing_defaults, duration_meta
+from filter import ec2_filters, ebs_filters, nodegroup_meta, cluster_meta, eks_pricing_meta, pricing_defaults, duration_meta, nat_gateway_filter, nat_gateway_meta, rds_filters, rds_meta, rds_utils
 
-TF_PLAN_FILE = "../test/terraform-loadbalancer.plan.json"
+TF_PLAN_FILE = "../test/terraform-sf2l.plan.json"
 IGNORED_PREFIXES = ["aws_iam_", "aws_network_acl", "aws_vpc", "aws_subnet", "aws_route", "aws_default_", "aws_internet_gateway"]
 IGNORED_RESOURCE_TYPES = ["null_resource", "local_file", "random_", "external"]
 
@@ -68,6 +68,18 @@ def detect_alb_from_controller(plan):
                 return True
     return False
 
+def detect_alb_resources(plan):
+    for res in plan.get("resource_changes", []):
+        if res.get("type") == "aws_lb" and res.get("change", {}).get("after", {}).get("load_balancer_type") == "application":
+            return True
+    return False
+
+def count_albs(plan):
+    return sum(
+        1 for res in plan.get("resource_changes", [])
+        if res.get("type") == "aws_lb" and res.get("change", {}).get("after", {}).get("load_balancer_type") == "application"
+    )
+
 def get_ec2_price(pricing_client, filters):
     try:
         response = pricing_client.get_products(
@@ -103,6 +115,43 @@ def get_spot_price(ec2_client, instance_type, availability_zone="eu-central-1a")
         pass
     return 0.0
 
+def get_nat_gateway_price(pricing_client, filters):
+    try:
+        response = pricing_client.get_products(
+            ServiceCode="AmazonVPC",
+            Filters=filters,
+            MaxResults=1
+        )
+        for item in response.get("PriceList", []):
+            offer = json.loads(item)
+            terms = offer.get("terms", {}).get("OnDemand", {})
+            for term in terms.values():
+                dimensions = term.get("priceDimensions", {})
+                for dim in dimensions.values():
+                    price = dim.get("pricePerUnit", {}).get("USD")
+                    if price:
+                        return float(price)
+    except Exception as e:
+        print(f"⚠️ Fehler bei NAT Gateway Preisabfrage: {e}")
+    return pricing_defaults.NAT_GATEWAY_HOURLY_RATE
+
+def extract_rds_info(plan):
+    modules = [plan["planned_values"]["root_module"]]
+    while modules:
+        module = modules.pop()
+        for res in module.get("resources", []):
+            if res.get("type") == "aws_db_instance":
+                values = res.get("values", {})
+                return {
+                    "instance_class": values.get("instance_class"),
+                    "engine": values.get("engine"),
+                    "storage_type": values.get("storage_type"),
+                    "storage_gb": values.get("allocated_storage"),
+                    "multi_az": values.get("multi_az", False)
+                }
+        modules.extend(module.get("child_modules", []))
+    return None
+
 def main():
     args = parse_args()
 
@@ -120,7 +169,12 @@ def main():
 
     instance_type, capacity_type, desired_size = nodegroup_meta.extract(plan)
     region = "EU (Frankfurt)"
-    marketoption = "OnDemand" if capacity_type.upper() == "ON_DEMAND" else "Spot"
+
+    if capacity_type:
+        marketoption = "OnDemand" if capacity_type.upper() == "ON_DEMAND" else "Spot"
+    else:
+        print("⚠️  Keine capacity_type gefunden – fallback zu 'OnDemand'")
+        marketoption = "OnDemand"
 
     ec2 = ec2_filters.build(instance_type, region, marketoption)
     ebs = ebs_filters.build("gp3", region)
@@ -148,7 +202,7 @@ def main():
 
     # EBS Volumes nur wenn keine Fargate-Nutzung
     if desired_size > 0 and not use_fargate:
-        ebs_price_per_gb = pricing_defaults.AMAZON_EBS
+        ebs_price_per_gb = pricing_defaults.EBS_STORAGE_PRICING.get("gp3", 0.08)
         ebs_cost = round((ebs_price_per_gb * 20 / 730) * desired_size * HOURS_PER_MONTH, 5)
         table.append(["EBS Volumes", desired_size, "gp3 (20 GB)", f"${ebs_cost:.5f}"])
         total_cost += ebs_cost
@@ -164,16 +218,41 @@ def main():
         ])
         total_cost += fargate_cost
 
-    # ALB (angenommen durch Helm Chart)
-    if detect_alb_from_controller(plan):
-        alb_cost = round((pricing_defaults.ALB_HOURLY_RATE + pricing_defaults.ALB_LCU_RATE * pricing_defaults.ALB_ASSUMED_LCU) * HOURS_PER_MONTH, 5)
-        table.append(["ALB (geschätzt)", 1, f"{pricing_defaults.ALB_ASSUMED_LCU} LCU", f"${alb_cost:.5f}"])
+    # ALB (angenommen durch Helm Chart oder direkte ALB-Resource)
+    alb_count = count_albs(plan)
+    if detect_alb_from_controller(plan) or alb_count > 0:
+        alb_cost = round((pricing_defaults.ALB_HOURLY_RATE + pricing_defaults.ALB_LCU_RATE * pricing_defaults.ALB_ASSUMED_LCU) * HOURS_PER_MONTH, 5) * max(alb_count, 1)
+        table.append(["ALB (geschätzt)", alb_count or 1, f"{pricing_defaults.ALB_ASSUMED_LCU} LCU", f"${alb_cost:.5f}"])
         total_cost += alb_cost
+
+    # NAT Gateway (dynamisch)
+    nat_count = nat_gateway_meta.count(plan)
+    if nat_count > 0:
+        nat_filters = nat_gateway_filter.build(region)
+        nat_unit_price = get_nat_gateway_price(pricing, nat_filters)
+        nat_cost = round(nat_unit_price * nat_count * HOURS_PER_MONTH, 5)
+        table.append(["NAT Gateway", nat_count, "Standard", f"${nat_cost:.5f}"])
+        total_cost += nat_cost
+
+    # RDS-Kosten berechnen
+    rds_info = extract_rds_info(plan)
+    if rds_info:
+        rds_filter = rds_filters.build(
+            rds_info["instance_class"],
+            rds_info["engine"],
+            region,
+            rds_info["multi_az"]
+        )
+        rds_instance_price = get_ec2_price(pricing, rds_filter)
+        rds_storage_price_per_gb = pricing_defaults.EBS_STORAGE_PRICING.get(rds_info["storage_type"], region)
+        rds_storage_cost = rds_storage_price_per_gb * rds_info["storage_gb"]
+        monthly_rds_cost = round(rds_instance_price * HOURS_PER_MONTH + rds_storage_cost, 5)
+        table.append(["RDS", 1, rds_info["instance_class"], f"${monthly_rds_cost:.5f}"])
+        total_cost += monthly_rds_cost
 
     print("\n📊 EKS Kostenübersicht (pro Monat)")
     print(tabulate(table, headers=["Komponente", "Anzahl", "Typ", "Kosten"], tablefmt="github"))
     print(f"\n💰 Gesamtkosten/Monat: ${round(total_cost, 5)}")
-
 
 if __name__ == "__main__":
     main()
