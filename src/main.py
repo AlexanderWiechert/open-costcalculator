@@ -1,98 +1,162 @@
-import argparse
-import datetime
+# Neuer Ansatz für Terraform AWS-Kostenanalyse mit Filtersystem
+import boto3
 import json
-from terraform_parser import load_tf_plan, extract_variables, extract_cost_info, extract_lambda_info, extract_apigw_info
-from pricing.ec2_pricing import get_ec2_on_demand_price, get_ec2_spot_price, get_ec2_price_from_config
-from pricing.lambda_pricing import query_lambda_price, extract_price_from_lambda_response
-from pricing.apigw_pricing import query_apigw_price, extract_price_from_apigw_response
-from config import load_config
+import argparse
+from datetime import datetime
+from tabulate import tabulate
+
+from filter import ec2_filters, ebs_filters, nodegroup_meta, cluster_meta, eks_pricing_meta, pricing_defaults, duration_meta
+
+TF_PLAN_FILE = "../terraform-faregate.plan.json"
+IGNORED_PREFIXES = ["aws_iam_", "aws_network_acl", "aws_vpc", "aws_subnet", "aws_route", "aws_default_", "aws_internet_gateway"]
+IGNORED_RESOURCE_TYPES = ["null_resource", "local_file", "random_", "external"]
+
+HOURS_PER_MONTH = duration_meta.HOURS_PER_MONTH  # zentral gepflegt
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--plan", default=TF_PLAN_FILE, help="Pfad zur terraform.plan.json Datei")
+    return parser.parse_args()
+
+
+def is_relevant_resource(resource_type):
+    return not any(resource_type.startswith(prefix) for prefix in IGNORED_PREFIXES + IGNORED_RESOURCE_TYPES)
+
+
+def extract_relevant_resources(plan_path):
+    with open(plan_path) as f:
+        plan = json.load(f)
+
+    relevant = []
+    for change in plan.get("resource_changes", []):
+        rtype = change.get("type")
+        if is_relevant_resource(rtype):
+            relevant.append(rtype)
+    return sorted(set(relevant))
+
+
+def calculate_control_plane_cost(release_date, hours):
+    if not release_date:
+        print(f"⚠️  Keine Release-Info gefunden, Standardrate wird verwendet.")
+        return pricing_defaults.CONTROL_PLANE_STANDARD_RATE * hours
+
+    current_date = datetime.now()
+    months_since_release = (current_date.year - release_date.year) * 12 + current_date.month - release_date.month
+
+    if months_since_release <= 14:
+        return pricing_defaults.CONTROL_PLANE_STANDARD_RATE * hours
+    elif months_since_release <= 26:
+        return pricing_defaults.CONTROL_PLANE_EXTENDED_RATE * hours
+    else:
+        print(f"⚠️  Kubernetes-Version wird möglicherweise nicht mehr unterstützt.")
+        return 0.0
+
+
+def detect_fargate_usage(plan):
+    for res in plan.get("resource_changes", []):
+        if res.get("type") == "aws_eks_fargate_profile":
+            return True
+    return False
+
+
+def calculate_fargate_cost(hours):
+    cpu_cost = pricing_defaults.FARGATE_VCPU_RATE * pricing_defaults.FARGATE_DEFAULT_VCPU
+    ram_cost = pricing_defaults.FARGATE_RAM_RATE * pricing_defaults.FARGATE_DEFAULT_RAM_GB
+    total_per_pod = (cpu_cost + ram_cost) * hours
+    return round(total_per_pod * pricing_defaults.FARGATE_DEFAULT_PODS, 5)
+
+
+def get_ec2_price(pricing_client, filters):
+    try:
+        response = pricing_client.get_products(
+            ServiceCode="AmazonEC2",
+            Filters=filters,
+            MaxResults=1
+        )
+        for item in response.get("PriceList", []):
+            offer = json.loads(item)
+            terms = offer.get("terms", {}).get("OnDemand", {})
+            for term in terms.values():
+                dimensions = term.get("priceDimensions", {})
+                for dim in dimensions.values():
+                    price = dim.get("pricePerUnit", {}).get("USD")
+                    if price:
+                        print(f"🔍 Gefundener EC2 Preis: {price} USD für Filter: {json.dumps(filters, indent=2)}")
+                        return float(price)
+    except Exception as e:
+        print(f"⚠️ Fehler bei EC2-Preisabfrage: {e}")
+    return 0.0
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Cost Query Script")
-    parser.add_argument("--plan", action="store_true", help="Use Terraform plan (plan.json) for variable extraction")
-    args = parser.parse_args()
+    args = parse_args()
+    with open(args.plan) as f:
+        plan = json.load(f)
 
-    current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    pricing = boto3.client("pricing", region_name="us-east-1")
 
-    if args.plan:
-        plan = load_tf_plan("plans/plan.json")
-        variables = extract_variables(plan)
-        eks_info = extract_cost_info(plan)
-        lambda_info = extract_lambda_info(plan)
-        apigw_info = extract_apigw_info(plan)
+    relevant_resources = extract_relevant_resources(args.plan)
+    print("✅ Verarbeitete Terraform-Ressourcentypen:")
+    for r in relevant_resources:
+        print(" -", r)
+
+    instance_type, capacity_type, desired_size = nodegroup_meta.extract(plan)
+    region = "EU (Frankfurt)"
+    marketoption = "OnDemand" if capacity_type.upper() == "ON_DEMAND" else "Spot"
+
+    ec2 = ec2_filters.build(instance_type, region, marketoption)
+    ebs = ebs_filters.build("gp3", region)
+
+    print("\n📦 EC2 Filter:")
+    print(json.dumps(ec2, indent=2))
+
+    print("\n💾 EBS Filter:")
+    print(json.dumps(ebs, indent=2))
+
+    print(f"\n👥 Desired Node Count: {desired_size}")
+
+    table = []
+    total_cost = 0.0
+
+    # Kontrollplane-Kosten berechnen
+    k8s_version = cluster_meta.extract_version(plan)
+    if k8s_version:
+        release_date = eks_pricing_meta.get_release_date(k8s_version)
+        cp_cost = round(calculate_control_plane_cost(release_date, hours=HOURS_PER_MONTH), 5)
+        total_cost += cp_cost
+        table.append(["Control Plane", 1, f"v{k8s_version}", f"${cp_cost:.5f}"])
     else:
-        # Im Config-Modus: Lese Konfiguration aus config.yml und führe die EC2-Preisabfrage durch.
-        config = load_config("config.yml")
-        variables = config.get("pricing", {})
-        ec2_output = get_ec2_price_from_config()
-        # In diesem Zweig sind weitere Ressourcen (EKS, Lambda, API GW) nicht extrahiert.
-        eks_info = []
-        lambda_info = []
-        apigw_info = []
+        print("⚠️  Keine Kubernetes-Version im Plan gefunden – Kontrollplane-Kosten nicht berechnet.")
 
-    print("Extracted Variables:")
-    print(json.dumps(variables, indent=2))
+    # Node Group (EC2)
+    if instance_type and desired_size > 0:
+        ec2_unit_cost = get_ec2_price(pricing, ec2)
+        ec2_cost = round(ec2_unit_cost * desired_size * HOURS_PER_MONTH, 5)
+        table.append(["Node Group (EC2)", desired_size, instance_type, f"${ec2_cost:.5f}"])
+        total_cost += ec2_cost
 
-    if args.plan and eks_info:
-        print("\nEKS Node Group Summary:")
-        for info in eks_info:
-            print(f"\nResource (eks_node_group): {info['resource']}")
-            print(f"  Cluster Name: {info['cluster_name']}")
-            print(f"  Capacity Type: {info['capacity_type']}")
-            if info.get("desired_size") is not None:
-                print(f"  Number of Instances: {info['desired_size']}")
-            else:
-                print("  Number of Instances: not defined")
-            for instance_type in info["instance_types"]:
-                if info["capacity_type"].upper() == "SPOT":
-                    price = query_spot_price(instance_type, variables.get("region", "us-east-1"))
-                else:
-                    marketoption = "OnDemand"
-                    response = query_on_demand_price(instance_type, variables.get("region", "us-east-1"), marketoption)
-                    price = extract_price_from_on_demand_response(response)
-                try:
-                    price_float = float(price)
-                except (TypeError, ValueError):
-                    price_float = 0.0
-                hourly_cost = price_float * (info.get("desired_size") or 1)
-                print(f"  Instance Type: {instance_type}")
-                print(f"  Hourly Cost: {hourly_cost} USD/h")
-                print(f"  Timestamp: {current_timestamp}")
+    # EBS Volumes
+    ebs_price_per_gb = pricing_defaults.AMAZON_EBS
+    ebs_cost = round((ebs_price_per_gb * 20 / 730) * desired_size * HOURS_PER_MONTH, 5)
+    table.append(["EBS Volumes", desired_size, "gp3 (20 GB)", f"${ebs_cost:.5f}"])
+    total_cost += ebs_cost
 
-    if not args.plan:
-        print("\nEC2 Price Output (from config):")
-        print(json.dumps(ec2_output, indent=2))
+    # Fargate
+    if detect_fargate_usage(plan):
+        fargate_cost = calculate_fargate_cost(hours=HOURS_PER_MONTH)
+        table.append([
+            "Fargate",
+            pricing_defaults.FARGATE_DEFAULT_PODS,
+            f"{pricing_defaults.FARGATE_DEFAULT_VCPU}vCPU/{pricing_defaults.FARGATE_DEFAULT_RAM_GB}GB",
+            f"${fargate_cost:.5f}"
+        ])
+        total_cost += fargate_cost
 
-    if lambda_info:
-        print("\nLambda Function Summary:")
-        for lam in lambda_info:
-            print(f"\nResource (lambda): {lam['resource']}")
-            print(f"  Function Name: {lam['function_name']}")
-            print(f"  Runtime: {lam['runtime']}")
-            print(f"  Memory Size: {lam['memory_size']} MB")
-            response = query_lambda_price(lam["runtime"], lam["memory_size"])
-            price = extract_price_from_lambda_response(response)
-            try:
-                price_float = float(price)
-            except (TypeError, ValueError):
-                price_float = 0.0
-            print(f"  Price per duration unit: {price_float} USD")
-            print(f"  Timestamp: {current_timestamp}")
+    print("\n📊 EKS Kostenübersicht (pro Monat)")
+    print(tabulate(table, headers=["Komponente", "Anzahl", "Typ", "Kosten"], tablefmt="github"))
+    print(f"\n💰 Gesamtkosten/Monat: ${round(total_cost, 5)}")
 
-    if apigw_info:
-        print("\nAPI Gateway Summary:")
-        for api in apigw_info:
-            print(f"\nResource (apigw): {api['resource']}")
-            print(f"  Name: {api['name']}")
-            print(f"  Description: {api['description']}")
-            response = query_apigw_price("REST")
-            price = extract_price_from_apigw_response(response)
-            try:
-                price_float = float(price)
-            except (TypeError, ValueError):
-                price_float = 0.0
-            print(f"  Price: {price_float} USD")
-            print(f"  Timestamp: {current_timestamp}")
 
 if __name__ == "__main__":
     main()

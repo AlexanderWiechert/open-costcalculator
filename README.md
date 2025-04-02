@@ -49,4 +49,4 @@ Der Container führt nun das Skript aus und gibt die AWS-Preisinformationen aus.
 
 python3 -m venv venv
 source venv/bin/activate
-pip install boto3 pyyaml
+pip install boto3 pyyaml tabulate
