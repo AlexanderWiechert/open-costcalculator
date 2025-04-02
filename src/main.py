@@ -7,7 +7,7 @@ from tabulate import tabulate
 
 from filter import ec2_filters, ebs_filters, nodegroup_meta, cluster_meta, eks_pricing_meta, pricing_defaults, duration_meta
 
-TF_PLAN_FILE = "../terraform-faregate.plan.json"
+TF_PLAN_FILE = "../terraform-spot.plan.json"
 IGNORED_PREFIXES = ["aws_iam_", "aws_network_acl", "aws_vpc", "aws_subnet", "aws_route", "aws_default_", "aws_internet_gateway"]
 IGNORED_RESOURCE_TYPES = ["null_resource", "local_file", "random_", "external"]
 
@@ -89,12 +89,31 @@ def get_ec2_price(pricing_client, filters):
     return 0.0
 
 
+def get_spot_price(ec2_client, instance_type, availability_zone="eu-central-1a"):
+    try:
+        prices = ec2_client.describe_spot_price_history(
+            InstanceTypes=[instance_type],
+            ProductDescriptions=["Linux/UNIX"],
+            AvailabilityZone=availability_zone,
+            MaxResults=1
+        )
+        if prices["SpotPriceHistory"]:
+            price = float(prices["SpotPriceHistory"][0]["SpotPrice"])
+            print(f"☁️  Spotpreis {instance_type} in {availability_zone}: ${price:.4f} USD")
+            return price
+    except Exception as e:
+        print(f"⚠️ Fehler bei Spot-Preisabfrage: {e}")
+    return 0.0
+
+
 def main():
     args = parse_args()
     with open(args.plan) as f:
         plan = json.load(f)
 
     pricing = boto3.client("pricing", region_name="us-east-1")
+    ec2_client = boto3.client("ec2")
+    use_fargate = detect_fargate_usage(plan)
 
     relevant_resources = extract_relevant_resources(args.plan)
     print("✅ Verarbeitete Terraform-Ressourcentypen:")
@@ -129,21 +148,25 @@ def main():
     else:
         print("⚠️  Keine Kubernetes-Version im Plan gefunden – Kontrollplane-Kosten nicht berechnet.")
 
-    # Node Group (EC2)
-    if instance_type and desired_size > 0:
-        ec2_unit_cost = get_ec2_price(pricing, ec2)
+    # Node Group (EC2) nur wenn kein Fargate genutzt wird
+    if instance_type and desired_size > 0 and not use_fargate:
+        if marketoption == "OnDemand":
+            ec2_unit_cost = get_ec2_price(pricing, ec2)
+        else:
+            ec2_unit_cost = get_spot_price(ec2_client, instance_type)
         ec2_cost = round(ec2_unit_cost * desired_size * HOURS_PER_MONTH, 5)
         table.append(["Node Group (EC2)", desired_size, instance_type, f"${ec2_cost:.5f}"])
         total_cost += ec2_cost
 
-    # EBS Volumes
-    ebs_price_per_gb = pricing_defaults.AMAZON_EBS
-    ebs_cost = round((ebs_price_per_gb * 20 / 730) * desired_size * HOURS_PER_MONTH, 5)
-    table.append(["EBS Volumes", desired_size, "gp3 (20 GB)", f"${ebs_cost:.5f}"])
-    total_cost += ebs_cost
+    # EBS Volumes nur wenn keine Fargate-Nutzung
+    if desired_size > 0 and not use_fargate:
+        ebs_price_per_gb = pricing_defaults.AMAZON_EBS
+        ebs_cost = round((ebs_price_per_gb * 20 / 730) * desired_size * HOURS_PER_MONTH, 5)
+        table.append(["EBS Volumes", desired_size, "gp3 (20 GB)", f"${ebs_cost:.5f}"])
+        total_cost += ebs_cost
 
     # Fargate
-    if detect_fargate_usage(plan):
+    if use_fargate:
         fargate_cost = calculate_fargate_cost(hours=HOURS_PER_MONTH)
         table.append([
             "Fargate",
