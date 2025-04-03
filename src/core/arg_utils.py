@@ -2,7 +2,7 @@
 
 import argparse
 
-DEFAULT_PLAN_PATH = "../test/terraform-loadbalancer.plan.json"
+DEFAULT_PLAN_PATH = "../plan/terraform-loadbalancer.plan.json"
 LOG_DEBUG = False  # Wird per parse_args() aktualisiert
 
 def parse_args():

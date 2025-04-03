@@ -13,7 +13,7 @@ from resources.nat_gateway import nat_gateway_filter, nat_gateway_meta
 from resources.rds import rds_costs, rds_filters, rds_meta
 from resources.alb import alb_costs
 
-TF_PLAN_FILE = "../test/terraform-sf2l.plan.json"
+TF_PLAN_FILE = "../plan/terraform-sf2l.plan.json"
 IGNORED_PREFIXES = ["aws_iam_", "aws_network_acl", "aws_vpc", "aws_subnet", "aws_route", "aws_default_", "aws_internet_gateway"]
 IGNORED_RESOURCE_TYPES = ["null_resource", "local_file", "random_", "external"]
 
