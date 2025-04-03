@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from filter import *
+from filter import logger, rds_costs, fargate_costs
 
 TF_PLAN_FILE = "../test/terraform-sf2l.plan.json"
 IGNORED_PREFIXES = ["aws_iam_", "aws_network_acl", "aws_vpc", "aws_subnet", "aws_route", "aws_default_", "aws_internet_gateway"]
@@ -75,27 +76,10 @@ def detect_alb_from_controller(plan):
 def count_albs(plan):
     return count_resources(plan, "aws_lb", lambda r: r.get("change", {}).get("after", {}).get("load_balancer_type") == "application")
 
-def extract_rds_info(plan):
-    modules = [plan["planned_values"]["root_module"]]
-    while modules:
-        module = modules.pop()
-        for res in module.get("resources", []):
-            if res.get("type") == "aws_db_instance":
-                values = res.get("values", {})
-                return {
-                    "instance_class": values.get("instance_class"),
-                    "engine": values.get("engine"),
-                    "storage_type": values.get("storage_type"),
-                    "storage_gb": values.get("allocated_storage"),
-                    "multi_az": values.get("multi_az", False)
-                }
-        modules.extend(module.get("child_modules", []))
-    return None
-
 def print_summary_table(table, total_cost):
-    print("\n📊 EKS Kostenübersicht (pro Monat)")
+    logger.info("📊 EKS Kostenübersicht (pro Monat)")
     print(tabulate(table, headers=["Komponente", "Anzahl", "Typ", "Kosten"], tablefmt="github"))
-    print(f"\n💰 Gesamtkosten/Monat: ${round(total_cost, 5)}")
+    logger.info(f"💰 Gesamtkosten/Monat: ${round(total_cost, 5)}")
 
 def process_node_group(pricing, ec2_client, instance_type, desired_size, marketoption, region):
     ec2 = ec2_filters.build(instance_type, region, marketoption)
@@ -110,11 +94,44 @@ def process_node_group(pricing, ec2_client, instance_type, desired_size, marketo
         ["EBS Volumes", desired_size, "gp3 (20 GB)", f"${ebs_cost:.5f}"]
     ], ec2_cost + ebs_cost
 
+def process_control_plane(plan, hours):
+    k8s_version = cluster_meta.extract_version(plan)
+    if not k8s_version:
+        return [], 0.0
+    release_date = eks_pricing_meta.get_release_date(k8s_version)
+    cp_cost = round(calculate_control_plane_cost(release_date, hours=hours), 5)
+    return [["Control Plane", 1, f"v{k8s_version}", f"${cp_cost:.5f}"]], cp_cost
+
+def process_alb(plan, hours):
+    alb_count = count_albs(plan)
+    if detect_alb_from_controller(plan) or alb_count > 0:
+        alb_cost = round((pricing_defaults.ALB_HOURLY_RATE + pricing_defaults.ALB_LCU_RATE * pricing_defaults.ALB_ASSUMED_LCU) * hours, 5) * max(alb_count, 1)
+        return [["ALB (geschätzt)", alb_count or 1, f"{pricing_defaults.ALB_ASSUMED_LCU} LCU", f"${alb_cost:.5f}"]], alb_cost
+    return [], 0.0
+
+def process_nat_gateway(plan, pricing, region, hours):
+    nat_count = nat_gateway_meta.count(plan)
+    if nat_count > 0:
+        nat_filters = nat_gateway_filter.build(region)
+        nat_unit_price = pricing_utils.get_price(pricing, "AmazonVPC", nat_filters)
+        nat_cost = round(nat_unit_price * nat_count * hours, 5)
+        return [["NAT Gateway", nat_count, "Standard", f"${nat_cost:.5f}"]], nat_cost
+    return [], 0.0
+
+def process_fargate(hours):
+    fargate_cost = fargate_costs.calculate_fargate_cost(hours)
+    return [[
+        "Fargate",
+        pricing_defaults.FARGATE_DEFAULT_PODS,
+        f"{pricing_defaults.FARGATE_DEFAULT_VCPU}vCPU/{pricing_defaults.FARGATE_DEFAULT_RAM_GB}GB",
+        f"${fargate_cost:.5f}"
+    ]], fargate_cost
+
 def main():
     args = parse_args()
     plan_path = Path(args.plan)
     if not plan_path.is_file():
-        print(f"❌ Fehler: Die angegebene Datei '{args.plan}' wurde nicht gefunden.")
+        logger.error(f"Die angegebene Datei '{args.plan}' wurde nicht gefunden.")
         sys.exit(1)
 
     with open(args.plan) as f:
@@ -133,13 +150,9 @@ def main():
     table = []
     total_cost = 0.0
 
-    # Kontrollplane-Kosten
-    k8s_version = cluster_meta.extract_version(plan)
-    if k8s_version:
-        release_date = eks_pricing_meta.get_release_date(k8s_version)
-        cp_cost = round(calculate_control_plane_cost(release_date, hours=HOURS_PER_MONTH), 5)
-        total_cost += cp_cost
-        table.append(["Control Plane", 1, f"v{k8s_version}", f"${cp_cost:.5f}"])
+    rows, cost = process_control_plane(plan, HOURS_PER_MONTH)
+    table.extend(rows)
+    total_cost += cost
 
     if instance_type and desired_size > 0 and not use_fargate:
         rows, cost = process_node_group(pricing, ec2_client, instance_type, desired_size, marketoption, region)
@@ -147,44 +160,21 @@ def main():
         total_cost += cost
 
     if use_fargate:
-        fargate_cost = calculate_fargate_cost(hours=HOURS_PER_MONTH)
-        table.append([
-            "Fargate",
-            pricing_defaults.FARGATE_DEFAULT_PODS,
-            f"{pricing_defaults.FARGATE_DEFAULT_VCPU}vCPU/{pricing_defaults.FARGATE_DEFAULT_RAM_GB}GB",
-            f"${fargate_cost:.5f}"
-        ])
-        total_cost += fargate_cost
+        rows, cost = process_fargate(HOURS_PER_MONTH)
+        table.extend(rows)
+        total_cost += cost
 
-    alb_count = count_albs(plan)
-    if detect_alb_from_controller(plan) or alb_count > 0:
-        alb_cost = round((pricing_defaults.ALB_HOURLY_RATE + pricing_defaults.ALB_LCU_RATE * pricing_defaults.ALB_ASSUMED_LCU) * HOURS_PER_MONTH, 5) * max(alb_count, 1)
-        table.append(["ALB (geschätzt)", alb_count or 1, f"{pricing_defaults.ALB_ASSUMED_LCU} LCU", f"${alb_cost:.5f}"])
-        total_cost += alb_cost
+    rows, cost = process_alb(plan, HOURS_PER_MONTH)
+    table.extend(rows)
+    total_cost += cost
 
-    nat_count = nat_gateway_meta.count(plan)
-    if nat_count > 0:
-        nat_filters = nat_gateway_filter.build(region)
-        nat_unit_price = pricing_utils.get_price(pricing, "AmazonVPC", nat_filters)
-        nat_cost = round(nat_unit_price * nat_count * HOURS_PER_MONTH, 5)
-        table.append(["NAT Gateway", nat_count, "Standard", f"${nat_cost:.5f}"])
-        total_cost += nat_cost
+    rows, cost = process_nat_gateway(plan, pricing, region, HOURS_PER_MONTH)
+    table.extend(rows)
+    total_cost += cost
 
-    rds_info = extract_rds_info(plan)
-    if rds_info:
-        rds_filter = rds_filters.build(
-            rds_info["instance_class"],
-            rds_info["engine"],
-            region,
-            rds_info["multi_az"]
-        )
-        rds_instance_price = pricing_utils.get_price(pricing, "AmazonRDS", rds_filter)
-        rds_storage_price_per_gb = rds_utils.get_rds_storage_price(pricing, rds_info["storage_type"], region)
-        rds_instance_cost = round(rds_instance_price * HOURS_PER_MONTH, 5)
-        rds_storage_cost = round(rds_storage_price_per_gb * rds_info["storage_gb"], 5)
-        table.append(["RDS Instance", 1, rds_info["instance_class"], f"${rds_instance_cost:.5f}"])
-        table.append(["RDS Storage", rds_info["storage_gb"], f"{rds_info['storage_type']}", f"${rds_storage_cost:.5f}"])
-        total_cost += rds_instance_cost + rds_storage_cost
+    rds_rows, rds_total = rds_costs.calculate_rds_cost(pricing, plan, region, HOURS_PER_MONTH)
+    table.extend(rds_rows)
+    total_cost += rds_total
 
     print_summary_table(table, total_cost)
 
