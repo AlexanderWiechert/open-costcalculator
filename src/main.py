@@ -9,7 +9,7 @@ from pathlib import Path
 
 from filter import *
 
-TF_PLAN_FILE = "../test/terraform.plan.json"
+TF_PLAN_FILE = "../test/terraform-sf2l.plan.json"
 IGNORED_PREFIXES = ["aws_iam_", "aws_network_acl", "aws_vpc", "aws_subnet", "aws_route", "aws_default_", "aws_internet_gateway"]
 IGNORED_RESOURCE_TYPES = ["null_resource", "local_file", "random_", "external"]
 
@@ -26,7 +26,6 @@ def is_relevant_resource(resource_type):
 def extract_relevant_resources(plan_path):
     with open(plan_path) as f:
         plan = json.load(f)
-
     relevant = []
     for change in plan.get("resource_changes", []):
         rtype = change.get("type")
@@ -34,13 +33,20 @@ def extract_relevant_resources(plan_path):
             relevant.append(rtype)
     return sorted(set(relevant))
 
+def extract_region_from_plan(plan):
+    try:
+        root = plan["configuration"]["provider_config"]["aws"]["expressions"]
+        if "region" in root:
+            return root["region"]["constant"]
+    except Exception:
+        pass
+    return "EU (Frankfurt)"  # Fallback
+
 def calculate_control_plane_cost(release_date, hours):
     if not release_date:
         return pricing_defaults.CONTROL_PLANE_STANDARD_RATE * hours
-
     current_date = datetime.now()
     months_since_release = (current_date.year - release_date.year) * 12 + current_date.month - release_date.month
-
     if months_since_release <= 14:
         return pricing_defaults.CONTROL_PLANE_STANDARD_RATE * hours
     elif months_since_release <= 26:
@@ -48,37 +54,26 @@ def calculate_control_plane_cost(release_date, hours):
     else:
         return 0.0
 
-def detect_fargate_usage(plan):
-    for res in plan.get("resource_changes", []):
-        if res.get("type") == "aws_eks_fargate_profile":
-            return True
-    return False
+def detect_resource(plan, resource_type, condition=None):
+    return any(
+        res.get("type") == resource_type and (condition(res) if condition else True)
+        for res in plan.get("resource_changes", [])
+    )
 
-def calculate_fargate_cost(hours):
-    cpu_cost = pricing_defaults.FARGATE_VCPU_RATE * pricing_defaults.FARGATE_DEFAULT_VCPU
-    ram_cost = pricing_defaults.FARGATE_RAM_RATE * pricing_defaults.FARGATE_DEFAULT_RAM_GB
-    total_per_pod = (cpu_cost + ram_cost) * hours
-    return round(total_per_pod * pricing_defaults.FARGATE_DEFAULT_PODS, 5)
-
-def detect_alb_from_controller(plan):
-    for res in plan.get("resource_changes", []):
-        if res.get("type") == "helm_release":
-            chart = res.get("change", {}).get("after", {}).get("chart", "")
-            if "aws-load-balancer-controller" in chart:
-                return True
-    return False
-
-def detect_alb_resources(plan):
-    for res in plan.get("resource_changes", []):
-        if res.get("type") == "aws_lb" and res.get("change", {}).get("after", {}).get("load_balancer_type") == "application":
-            return True
-    return False
-
-def count_albs(plan):
+def count_resources(plan, resource_type, condition=None):
     return sum(
         1 for res in plan.get("resource_changes", [])
-        if res.get("type") == "aws_lb" and res.get("change", {}).get("after", {}).get("load_balancer_type") == "application"
+        if res.get("type") == resource_type and (condition(res) if condition else True)
     )
+
+def detect_fargate_usage(plan):
+    return detect_resource(plan, "aws_eks_fargate_profile")
+
+def detect_alb_from_controller(plan):
+    return detect_resource(plan, "helm_release", lambda r: "aws-load-balancer-controller" in r.get("change", {}).get("after", {}).get("chart", ""))
+
+def count_albs(plan):
+    return count_resources(plan, "aws_lb", lambda r: r.get("change", {}).get("after", {}).get("load_balancer_type") == "application")
 
 def extract_rds_info(plan):
     modules = [plan["planned_values"]["root_module"]]
@@ -97,9 +92,26 @@ def extract_rds_info(plan):
         modules.extend(module.get("child_modules", []))
     return None
 
+def print_summary_table(table, total_cost):
+    print("\n📊 EKS Kostenübersicht (pro Monat)")
+    print(tabulate(table, headers=["Komponente", "Anzahl", "Typ", "Kosten"], tablefmt="github"))
+    print(f"\n💰 Gesamtkosten/Monat: ${round(total_cost, 5)}")
+
+def process_node_group(pricing, ec2_client, instance_type, desired_size, marketoption, region):
+    ec2 = ec2_filters.build(instance_type, region, marketoption)
+    ec2_unit_cost = pricing_utils.get_price(pricing, "AmazonEC2", ec2) if marketoption == "OnDemand" else pricing_utils.get_spot_price(ec2_client, instance_type)
+    ec2_cost = round(ec2_unit_cost * desired_size * HOURS_PER_MONTH, 5)
+
+    ebs_price_per_gb = pricing_defaults.EBS_STORAGE_PRICING.get("gp3", 0.08)
+    ebs_cost = round((ebs_price_per_gb * 20 / 730) * desired_size * HOURS_PER_MONTH, 5)
+
+    return [
+        ["Node Group (EC2)", desired_size, instance_type, f"${ec2_cost:.5f}"],
+        ["EBS Volumes", desired_size, "gp3 (20 GB)", f"${ebs_cost:.5f}"]
+    ], ec2_cost + ebs_cost
+
 def main():
     args = parse_args()
-
     plan_path = Path(args.plan)
     if not plan_path.is_file():
         print(f"❌ Fehler: Die angegebene Datei '{args.plan}' wurde nicht gefunden.")
@@ -108,25 +120,20 @@ def main():
     with open(args.plan) as f:
         plan = json.load(f)
 
+    region = extract_region_from_plan(plan)
     pricing = boto3.client("pricing", region_name="us-east-1")
     ec2_client = boto3.client("ec2")
     use_fargate = detect_fargate_usage(plan)
 
     instance_type, capacity_type, desired_size = nodegroup_meta.extract(plan)
-    region = "EU (Frankfurt)"
-
-    if capacity_type:
-        marketoption = "OnDemand" if capacity_type.upper() == "ON_DEMAND" else "Spot"
-    else:
-        print("⚠️  Keine capacity_type gefunden – fallback zu 'OnDemand'")
-        marketoption = "OnDemand"
-
-    ec2 = ec2_filters.build(instance_type, region, marketoption)
-    ebs = ebs_filters.build("gp3", region)
+    marketoption = "OnDemand" if not capacity_type or capacity_type.upper() == "ON_DEMAND" else "Spot"
+    if not capacity_type:
+        logger.warn("Keine capacity_type gefunden – fallback zu 'OnDemand'")
 
     table = []
     total_cost = 0.0
 
+    # Kontrollplane-Kosten
     k8s_version = cluster_meta.extract_version(plan)
     if k8s_version:
         release_date = eks_pricing_meta.get_release_date(k8s_version)
@@ -135,19 +142,9 @@ def main():
         table.append(["Control Plane", 1, f"v{k8s_version}", f"${cp_cost:.5f}"])
 
     if instance_type and desired_size > 0 and not use_fargate:
-        if marketoption == "OnDemand":
-            ec2_unit_cost = pricing_utils.get_price(pricing, "AmazonEC2", ec2)
-        else:
-            ec2_unit_cost = pricing_utils.get_spot_price(ec2_client, instance_type)
-        ec2_cost = round(ec2_unit_cost * desired_size * HOURS_PER_MONTH, 5)
-        table.append(["Node Group (EC2)", desired_size, instance_type, f"${ec2_cost:.5f}"])
-        total_cost += ec2_cost
-
-    if desired_size > 0 and not use_fargate:
-        ebs_price_per_gb = pricing_defaults.EBS_STORAGE_PRICING.get("gp3", 0.08)
-        ebs_cost = round((ebs_price_per_gb * 20 / 730) * desired_size * HOURS_PER_MONTH, 5)
-        table.append(["EBS Volumes", desired_size, "gp3 (20 GB)", f"${ebs_cost:.5f}"])
-        total_cost += ebs_cost
+        rows, cost = process_node_group(pricing, ec2_client, instance_type, desired_size, marketoption, region)
+        table.extend(rows)
+        total_cost += cost
 
     if use_fargate:
         fargate_cost = calculate_fargate_cost(hours=HOURS_PER_MONTH)
@@ -189,9 +186,7 @@ def main():
         table.append(["RDS Storage", rds_info["storage_gb"], f"{rds_info['storage_type']}", f"${rds_storage_cost:.5f}"])
         total_cost += rds_instance_cost + rds_storage_cost
 
-    print("\n📊 EKS Kostenübersicht (pro Monat)")
-    print(tabulate(table, headers=["Komponente", "Anzahl", "Typ", "Kosten"], tablefmt="github"))
-    print(f"\n💰 Gesamtkosten/Monat: ${round(total_cost, 5)}")
+    print_summary_table(table, total_cost)
 
 if __name__ == "__main__":
     main()

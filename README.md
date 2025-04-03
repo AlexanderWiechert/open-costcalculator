@@ -125,3 +125,52 @@ pip install boto3 pyyaml tabulate
     aws_ses_domain_mail_from
 
     aws_ses_email_identity
+
+
+# ✅ Optimierungsvorschläge für main.py
+1. Wiederkehrende Codeblöcke in eigene Funktionen auslagern
+
+Beispiel: Die Preisberechnung + Ausgabe für EC2, EBS, ALB, NAT Gateway, RDS, Fargate, Control Plane etc. – diese folgen einem klaren Schema:
+
+def add_component(table, label, quantity, type_desc, cost):
+table.append([label, quantity, type_desc, f"${cost:.5f}"])
+return cost
+
+2. Region zentral konfigurieren
+
+Aktuell ist "EU (Frankfurt)" mehrfach hartcodiert. Empfehlung:
+
+REGION = "EU (Frankfurt)"
+
+3. Service-spezifische Preislogik kapseln
+
+Beispiel:
+
+def calculate_eks_control_plane_cost(plan, hours):
+version = cluster_meta.extract_version(plan)
+if not version:
+return None, 0.0
+release = eks_pricing_meta.get_release_date(version)
+cost = round(calculate_control_plane_cost(release, hours), 5)
+return f"v{version}", cost
+
+4. Modularisieren nach Komponenten (optional)
+
+Die Hauptfunktion main() wird bald zu lang. Du könntest sie in strukturierte Unterabschnitte aufteilen wie z. B.:
+
+def process_eks(plan, ...)
+def process_node_group(plan, ...)
+def process_rds(plan, ...)
+def process_nat_gateway(plan, ...)
+
+Jeder Rückgabewert liefert List[TableRow], Cost.
+5. Optional: Logging statt print() für Fehler
+
+Statt:
+
+print("⚠️  Keine capacity_type gefunden – fallback zu 'OnDemand'")
+
+→
+
+import logging
+logging.warning("Keine capacity_type gefunden – fallback zu 'OnDemand'")
