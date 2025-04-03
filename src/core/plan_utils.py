@@ -2,7 +2,8 @@
 
 import json
 from pathlib import Path
-from . import logger
+from core import logger
+
 
 def extract_plan(path):
     plan_path = Path(path)
