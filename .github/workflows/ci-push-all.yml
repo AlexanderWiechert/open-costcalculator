@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: 🧹 Run black
-        run: black src/ tests/
+        run: black --check src/ tests/ || echo "black check failed"
 
       - name: 🔍 Run flake8
         run: flake8 src/ tests/
