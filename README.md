@@ -1,46 +1,141 @@
-# costcalculator
+# OpenCostCalculator
 
-Dieses Repository enthält ein einfaches Beispiel, um AWS-Preisinformationen über die AWS Pricing API mit Python und boto3 abzurufen. Zudem wird gezeigt, wie du das Python-Skript in einem Docker-Container betreibst und dein lokales AWS-Credentials-Verzeichnis mountest.
+OpenCostCalculator ist ein modulares Python-Tool zur stunden- und monatsgenauen Kostenanalyse von Terraform-basierten AWS-Infrastrukturen. Es liest Terraform-Pläne (im JSON-Format), extrahiert relevante Ressourceninformationen und ermittelt auf Basis der AWS Pricing API dynamisch die geschätzten Kosten pro Ressource.
 
-## Inhalt
+## Merkmale
 
-- **aws_pricing.py**: Python-Skript zur Abfrage von Preisinformationen für eine EC2 t2.micro-Instanz in US East (N. Virginia) unter Linux.
-- **Dockerfile**: Docker-Konfiguration, um das Skript in einem Container auszuführen.
-- **README.md**: Diese Anleitung.
+- Analyse von AWS-Ressourcen direkt aus Terraform-Plänen (`terraform plan -out=... | show -json`)
+- Dynamische Preisermittlung via AWS Pricing API und EC2 Spot API
+- Unterstützung für:
+  - EKS Cluster & Node Groups (On-Demand & Spot)
+  - Fargate-Profile
+  - EBS Volumes
+  - NAT Gateways
+  - RDS Instanzen & Storage
+  - ALBs (geschätzte LCU-Nutzung)
+- Klar formatierte Kostenübersicht als Tabelle
+- Modular aufgebaut: jede AWS-Ressource ist über eigene Module erweiterbar
+- Debug-Logging und erweiterbare Filter-Logik
+
+## Projektstruktur
+
+```
+src/
+│
+├── main.py                         # Einstiegspunkt des Tools
+│
+├── core/                           # Gemeinsame Logik (Argumente, Logging, Preise)
+│   ├── arg_utils.py
+│   ├── duration_meta.py
+│   ├── logger.py
+│   ├── pricing_utils.py
+│
+├── resources/
+│   ├── eks/                        # EKS-spezifische Logik
+│   │   ├── cluster_meta.py
+│   │   ├── control_plane_costs.py
+│   │   ├── ec2_filters.py
+│   │   ├── eks_pricing_meta.py
+│   │   ├── fargate_costs.py
+│   │   ├── nodegroup_costs.py
+│   │   ├── nodegroup_meta.py
+│   │
+│   ├── alb/
+│   │   ├── alb_costs.py
+│   │
+│   ├── nat_gateway/
+│   │   ├── nat_gateway_costs.py
+│   │   ├── nat_gateway_meta.py
+│
+│   ├── rds/
+│   │   ├── rds_costs.py
+│   │   ├── rds_filters.py
+│   │   ├── rds_meta.py
+│   │   ├── rds_utils.py
+│
+├── tests/                          # Unit-Tests
+│   ├── test_logger.py
+│   ├── test_ec2_filters.py
+│   ├── test_pricing_utils.py
+│   ├── ...
+```
 
 ## Voraussetzungen
 
-- Ein aktives AWS-Konto mit gültigen Zugangsdaten.
-- Lokales AWS-Credentials-Verzeichnis (üblicherweise `~/.aws`), das deine AWS-Zugangsdaten enthält.
-- Docker (zum Erstellen und Ausführen des Containers).
-- Python (wenn du das Skript lokal testen möchtest).
+- Python 3.10 oder höher
+- AWS-Zugangsdaten via `~/.aws/credentials` oder Umgebungsvariablen
+- Terraform Plan im JSON-Format (`terraform show -json terraform.plan > terraform.plan.json`)
+- Installierte Dependencies:
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Nutzung
 
-### 1. AWS-Zugangsdaten konfigurieren
-
-Stelle sicher, dass dein lokales `~/.aws`-Verzeichnis deine AWS-Zugangsdaten enthält. Beispiel für `~/.aws/credentials`:
-
 ```bash
-[default]
-aws_access_key_id = DEINE_ACCESS_KEY_ID
-aws_secret_access_key = DEIN_SECRET_ACCESS_KEY
+cd src
+python main.py --plan ../test/terraform-eks.plan.json
 ```
 
-### 2. Docker-Image bauen
-
-Wechsle in den Ordner, in dem sich die Dateien befinden, und führe folgenden Befehl aus:
+Optional mit Debug-Ausgabe:
 
 ```bash
-docker build -t aws-pricing .
+python main.py --plan ../test/terraform-eks.plan.json --debug
 ```
 
-### 3. Container starten
+## Beispielausgabe
 
-Starte den Container und mounte dein lokales ~/.aws-Verzeichnis in den Container:
+```
+📊 Cloud Ressourcen Kostenübersicht (pro Monat)
+| Komponente      |   Anzahl | Typ         | Kosten    |
+|-----------------|----------|-------------|-----------|
+| Control Plane    |        1 | v1.31       | $73.00000 |
+| Node Group (EC2) |        2 | t3.medium   | $29.49200 |
+| RDS Instance     |        1 | db.t3.micro | $14.60000 |
+| RDS Storage      |       10 | gp2         | $1.15000  |
+| NAT Gateway      |        1 | Standard    | $32.85000 |
+| ALB (geschätzt)  |        2 | 1.0 LCU     | $44.53000 |
+💰 Gesamtkosten/Monat: $195.622
+```
+
+## Tests
+
+Das Projekt enthält Unit-Tests für zentrale Module:
+
+### Ausführen aller Tests
 
 ```bash
-docker run -v ~/.aws:/root/.aws aws-pricing
+pytest
 ```
 
-Der Container führt nun das Skript aus und gibt die AWS-Preisinformationen aus.
+### Einzelnen Test ausführen
+
+```bash
+pytest tests/test_logger.py
+```
+
+### Coverage Report
+
+```bash
+pytest --cov=src --cov-report=term-missing
+```
+
+Für SonarQube kannst du zusätzlich folgenden Report erzeugen:
+
+```bash
+pytest --cov=src --cov-report=xml
+```
+
+## Lizenz
+
+**Proprietäre Lizenz – Alle Rechte vorbehalten**
+
+Dieses Projekt ist urheberrechtlich geschützt und darf ohne ausdrückliche Genehmigung des Autors nicht kopiert, verbreitet, verändert oder kommerziell genutzt werden. Forks, Klone oder die Nutzung in anderen Projekten sind nicht erlaubt.
+
+Für Kooperationen oder kommerzielle Nutzung bitte Kontakt aufnehmen.
+
+---
+
+**Autor:** Alexander Wiechert  
+**E-Mail:** info@elastic2ls.com
