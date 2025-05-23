@@ -75,13 +75,13 @@ pip install -r requirements.txt
 
 ```bash
 cd src
-python main.py --plan ../test/terraform.plan.json
+python main.py --plan ../test/terraform-eks.plan.json
 ```
 
 Optional mit Debug-Ausgabe:
 
 ```bash
-python main.py --plan ../test/terraform.plan.json --debug
+python main.py --plan ../test/terraform-eks.plan.json --debug
 ```
 
 ## Beispielausgabe

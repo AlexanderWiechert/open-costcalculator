@@ -10,7 +10,7 @@ def parse_args():
     parser.add_argument(
         "--plan",
         default=DEFAULT_PLAN_PATH,
-        help="Pfad zur terraform.plan.json Datei"
+        help="Pfad zur terraform-eks.plan.json Datei"
     )
     parser.add_argument(
         "--debug",
