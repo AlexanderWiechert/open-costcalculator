@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push: {}  # trigger on any push to any branch
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+
+      - name: 🐍 Set up Python 3.9.22
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9.22'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: 🧹 Run black
+        run: black --check src/ tests/
+
+      - name: 🔍 Run flake8
+        run: flake8 src/ tests/
+
+      - name: ✅ Run pytest
+        run: pytest
+
+      - name: 🔎 Analyze eks plan
+        run: |
+          python main.py --plan plan/terraform-eks.plan.json --debug
+
+      - name: 🔎 Analyze fargate plan
+        run: |
+          python main.py --plan plan/terraform-fargate.plan.json --debug
+
+      - name: 🔎 Analyze loadbalancer plan
+        run: |
+          python main.py --plan plan/terraform-loadbalancer.plan.json --debug
+
+      - name: 🔎 Analyze sf2l plan
+        run: |
+          python main.py --plan plan/terraform-sf2l.plan.json --debug
+
+      - name: 🔎 Analyze spot plan
+        run: |
+          python main.py --plan plan/terraform-spot.plan.json --debug
