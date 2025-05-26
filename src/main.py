@@ -1,38 +1,51 @@
 # main.py
-import boto3
-import json
 import argparse
-from datetime import datetime
-from tabulate import tabulate
+import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
-from core import logger, pricing_utils, duration_meta, arg_utils
-from resources.eks import cluster_meta, eks_pricing_meta, fargate_costs, nodegroup_costs, nodegroup_meta, ec2_filters, control_plane_costs
+import boto3
+from tabulate import tabulate
+
+from core import arg_utils, duration_meta, logger, pricing_utils
+from resources.alb import alb_costs
+from resources.eks import (cluster_meta, control_plane_costs, ec2_filters,
+                           eks_pricing_meta, fargate_costs, nodegroup_costs,
+                           nodegroup_meta)
 from resources.nat_gateway import nat_gateway_filter, nat_gateway_meta
 from resources.rds import rds_costs, rds_filters, rds_meta
-from resources.alb import alb_costs
 
 TF_PLAN_FILE = "../plan/terraform-sf2l.plan.json"
-IGNORED_PREFIXES = ["aws_iam_", "aws_network_acl", "aws_vpc", "aws_subnet", "aws_route", "aws_default_", "aws_internet_gateway"]
+IGNORED_PREFIXES = [
+    "aws_iam_",
+    "aws_network_acl",
+    "aws_vpc",
+    "aws_subnet",
+    "aws_route",
+    "aws_default_",
+    "aws_internet_gateway",
+]
 IGNORED_RESOURCE_TYPES = ["null_resource", "local_file", "random_", "external"]
 
 HOURS_PER_MONTH = duration_meta.HOURS_PER_MONTH
 
+
 def parse_args():
     return arg_utils.parse_args()
+
 
 def is_relevant_resource(resource_type):
     return not any(resource_type.startswith(prefix) for prefix in IGNORED_PREFIXES + IGNORED_RESOURCE_TYPES)
 
+
 def extract_relevant_resources(plan_path):
     with open(plan_path) as f:
         plan = json.load(f)
-    return sorted({
-        change.get("type")
-        for change in plan.get("resource_changes", [])
-        if is_relevant_resource(change.get("type"))
-    })
+    return sorted(
+        {change.get("type") for change in plan.get("resource_changes", []) if is_relevant_resource(change.get("type"))}
+    )
+
 
 def extract_region_from_plan(plan):
     try:
@@ -43,10 +56,12 @@ def extract_region_from_plan(plan):
         pass
     return "EU (Frankfurt)"
 
+
 def print_summary_table(table, total_cost):
     logger.info("📊 Cloud Ressourcen Kostenübersicht (pro Monat)")
     print(tabulate(table, headers=["Komponente", "Anzahl", "Typ", "Kosten"], tablefmt="github"))
     logger.info(f"💰 Gesamtkosten/Monat: ${round(total_cost, 5)}")
+
 
 def main():
     args = parse_args()
@@ -84,7 +99,9 @@ def main():
         total_cost += cost
 
         if instance_type and desired_size > 0 and not use_fargate:
-            rows, cost = nodegroup_costs.process_node_group(pricing, ec2_client, instance_type, desired_size, marketoption, region)
+            rows, cost = nodegroup_costs.process_node_group(
+                pricing, ec2_client, instance_type, desired_size, marketoption, region
+            )
             table.extend(rows)
             total_cost += cost
 
@@ -106,6 +123,7 @@ def main():
     total_cost += rds_total
 
     print_summary_table(table, total_cost)
+
 
 if __name__ == "__main__":
     main()

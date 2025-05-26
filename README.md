@@ -68,7 +68,14 @@ src/
 - Installierte Dependencies:
 
 ```bash
-pip install -r requirements.txt
+# 1. Virtuelle Umgebung erstellen
+python3 -m venv .venv
+
+# 2. Aktivieren
+source .venv/bin/activate
+
+# 3. Pakete installieren
+pip3 install -r requirements.txt
 ```
 
 ## Nutzung

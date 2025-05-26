@@ -1,5 +1,6 @@
 from core import logger
 
+
 def test_logger_methods(capsys):
     logger.info("Test")
     logger.warn("Warnung")

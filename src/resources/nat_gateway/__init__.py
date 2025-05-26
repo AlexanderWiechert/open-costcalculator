@@ -1,4 +1,1 @@
-from . import (
-    nat_gateway_meta,
-    nat_gateway_filter
-)
+from . import nat_gateway_filter, nat_gateway_meta

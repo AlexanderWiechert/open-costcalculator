@@ -1,13 +1,13 @@
-from core import logger, arg_utils
 import json
 
-def get_price_for_service(pricing_client, service_code: str, filters: list, unit: str = "Hrs", fallback_price: float = 0.0) -> float:
+from core import arg_utils, logger
+
+
+def get_price_for_service(
+    pricing_client, service_code: str, filters: list, unit: str = "Hrs", fallback_price: float = 0.0
+) -> float:
     try:
-        response = pricing_client.get_products(
-            ServiceCode=service_code,
-            Filters=filters,
-            MaxResults=1
-        )
+        response = pricing_client.get_products(ServiceCode=service_code, Filters=filters, MaxResults=1)
         for item in response.get("PriceList", []):
             offer = json.loads(item)
             terms = offer.get("terms", {}).get("OnDemand", {})
@@ -18,7 +18,9 @@ def get_price_for_service(pricing_client, service_code: str, filters: list, unit
                         price = dim.get("pricePerUnit", {}).get("USD")
                         if price:
                             if arg_utils.LOG_DEBUG:  # 💡 Nur wenn --debug
-                                logger.info(f"🔍 Gefundener Preis: {price} USD für Service {service_code} mit Filtern {filters}")
+                                logger.info(
+                                    f"🔍 Gefundener Preis: {price} USD für Service {service_code} mit Filtern {filters}"
+                                )
                             return float(price)
     except Exception as e:
         logger.warn(f"Fehler bei Preisabfrage für {service_code}: {e}")
@@ -31,7 +33,7 @@ def get_spot_price(ec2_client, instance_type: str, availability_zone: str = "eu-
             InstanceTypes=[instance_type],
             ProductDescriptions=["Linux/UNIX"],
             AvailabilityZone=availability_zone,
-            MaxResults=1
+            MaxResults=1,
         )
         if prices.get("SpotPriceHistory"):
             price = float(prices["SpotPriceHistory"][0]["SpotPrice"])
@@ -48,9 +50,5 @@ def get_nat_gateway_price(pricing_client, filters: list) -> float:
     Gibt dynamischen Preis für NAT Gateway zurück (basierend auf Stunden).
     """
     return get_price_for_service(
-        pricing_client=pricing_client,
-        service_code="AmazonVPC",
-        filters=filters,
-        unit="Hrs",
-        fallback_price=0.045
+        pricing_client=pricing_client, service_code="AmazonVPC", filters=filters, unit="Hrs", fallback_price=0.045
     )

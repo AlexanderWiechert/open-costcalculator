@@ -6,5 +6,5 @@ def build(instance_type, region, marketoption="OnDemand"):
         {"Type": "TERM_MATCH", "Field": "operatingSystem", "Value": "Linux"},
         {"Type": "TERM_MATCH", "Field": "capacitystatus", "Value": "Used"},
         {"Type": "TERM_MATCH", "Field": "marketoption", "Value": marketoption},
-        {"Type": "TERM_MATCH", "Field": "preInstalledSw", "Value": "NA"}
+        {"Type": "TERM_MATCH", "Field": "preInstalledSw", "Value": "NA"},
     ]

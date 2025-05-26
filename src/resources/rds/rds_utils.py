@@ -2,6 +2,7 @@
 
 import json
 
+
 def get_rds_storage_price(pricing_client, storage_type, region):
     """
     Fragt dynamisch den Preis für RDS-Storage anhand des volumeType ab.
@@ -10,13 +11,9 @@ def get_rds_storage_price(pricing_client, storage_type, region):
     try:
         filters = [
             {"Type": "TERM_MATCH", "Field": "volumeType", "Value": storage_type},
-            {"Type": "TERM_MATCH", "Field": "location", "Value": region}
+            {"Type": "TERM_MATCH", "Field": "location", "Value": region},
         ]
-        response = pricing_client.get_products(
-            ServiceCode="AmazonRDS",
-            Filters=filters,
-            MaxResults=1
-        )
+        response = pricing_client.get_products(ServiceCode="AmazonRDS", Filters=filters, MaxResults=1)
         for item in response.get("PriceList", []):
             offer = json.loads(item)
             terms = offer.get("terms", {}).get("OnDemand", {})

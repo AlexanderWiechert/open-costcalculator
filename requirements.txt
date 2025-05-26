@@ -4,6 +4,7 @@ tabulate
 pytest
 pytest-cov
 coverage
-black
+black==24.3.0
 flake8
+isort
 pytest
