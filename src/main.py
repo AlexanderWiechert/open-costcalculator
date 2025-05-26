@@ -50,7 +50,7 @@ def extract_region_from_plan(plan):
             return root["region"]["constant"]
     except Exception:
         pass
-    return "EU (Frankfurt)"
+    return "eu-central-1"
 
 
 def print_summary_table(table, total_cost):
