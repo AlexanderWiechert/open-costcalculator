@@ -1,20 +1,33 @@
-# filter/plan_utils.py
+import pytest
+import core.plan_utils as plan_utils
+def test_extract_region_from_plan_valid():
+    plan = {
+        "configuration": {
+            "provider_config": {
+                "aws": {
+                    "expressions": {
+                        "region": {
+                            "constant_value": "eu-central-1"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert plan_utils.extract_region_from_plan(plan) == "eu-central-1"
 
-import json
-from pathlib import Path
+def test_extract_region_from_plan_invalid(caplog):
+    # Kein 'region'-Key enthalten
+    plan = {}
 
-from core import logger
+    with caplog.at_level("WARNING"):
+        result = plan_utils.extract_region_from_plan(plan)
 
+    assert result is None
+    assert "Region konnte aus dem Plan nicht extrahiert werden." in caplog.text
 
-def extract_plan(path):
-    plan_path = Path(path)
-    if not plan_path.is_file():
-        logger.error(f"Die angegebene Datei '{path}' wurde nicht gefunden.")
-        return None
-
+def extract_region_from_plan(plan: dict) -> str | None:
     try:
-        with open(path) as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Fehler beim Einlesen der Plan-Datei: {e}")
+        return plan["configuration"]["provider_config"]["aws"]["expressions"]["region"]["constant_value"]
+    except KeyError:
         return None
