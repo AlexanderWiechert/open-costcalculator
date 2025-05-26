@@ -8,8 +8,7 @@ from tabulate import tabulate
 
 from core import arg_utils, duration_meta, logger
 from resources.alb import alb_costs
-from resources.eks import (control_plane_costs, fargate_costs, nodegroup_costs,
-                           nodegroup_meta)
+from resources.eks import control_plane_costs, fargate_costs, nodegroup_costs, nodegroup_meta
 from resources.nat_gateway import nat_gateway_meta
 from resources.rds import rds_costs
 
