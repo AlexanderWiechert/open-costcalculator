@@ -36,20 +36,20 @@ jobs:
 
       - name: 🔎 Analyze eks plan
         run: |
-          python main.py --plan plan/terraform-eks.plan.json --debug
+          python src/main.py --plan plan/terraform-eks.plan.json --debug
 
       - name: 🔎 Analyze fargate plan
         run: |
-          python main.py --plan plan/terraform-fargate.plan.json --debug
+          python src/main.py --plan plan/terraform-fargate.plan.json --debug
 
       - name: 🔎 Analyze loadbalancer plan
         run: |
-          python main.py --plan plan/terraform-loadbalancer.plan.json --debug
+          python src/main.py --plan plan/terraform-loadbalancer.plan.json --debug
 
       - name: 🔎 Analyze sf2l plan
         run: |
-          python main.py --plan plan/terraform-sf2l.plan.json --debug
+          python src/main.py --plan plan/terraform-sf2l.plan.json --debug
 
       - name: 🔎 Analyze spot plan
         run: |
-          python main.py --plan plan/terraform-spot.plan.json --debug
+          python src/main.py --plan plan/terraform-spot.plan.json --debug
