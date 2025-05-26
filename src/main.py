@@ -71,7 +71,7 @@ def main():
 
     region = extract_region_from_plan(plan)
     pricing = boto3.client("pricing", region_name="us-east-1")
-    ec2_client = boto3.client("ec2")
+    ec2_client = boto3.client("ec2", region_name=region)
 
     table = []
     total_cost = 0.0
