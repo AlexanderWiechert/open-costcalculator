@@ -1,6 +1,6 @@
 # resources/rds/rds_costs.py
 
-from core import arg_utils, duration_meta, logger, pricing_utils
+from core import duration_meta, pricing_utils
 from resources.rds import rds_filters, rds_meta, rds_utils
 
 HOURS_PER_MONTH = duration_meta.HOURS_PER_MONTH

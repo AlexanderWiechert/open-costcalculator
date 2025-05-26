@@ -6,5 +6,6 @@ pytest-cov
 coverage
 black==24.3.0
 flake8
+autoflake
 isort
 pytest

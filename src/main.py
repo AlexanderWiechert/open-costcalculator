@@ -1,20 +1,17 @@
 # main.py
-import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import boto3
 from tabulate import tabulate
 
-from core import arg_utils, duration_meta, logger, pricing_utils
+from core import arg_utils, duration_meta, logger
 from resources.alb import alb_costs
-from resources.eks import (cluster_meta, control_plane_costs, ec2_filters,
-                           eks_pricing_meta, fargate_costs, nodegroup_costs,
+from resources.eks import (control_plane_costs, fargate_costs, nodegroup_costs,
                            nodegroup_meta)
-from resources.nat_gateway import nat_gateway_filter, nat_gateway_meta
-from resources.rds import rds_costs, rds_filters, rds_meta
+from resources.nat_gateway import nat_gateway_meta
+from resources.rds import rds_costs
 
 TF_PLAN_FILE = "../plan/terraform-sf2l.plan.json"
 IGNORED_PREFIXES = [
