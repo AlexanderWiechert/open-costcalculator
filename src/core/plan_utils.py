@@ -1,5 +1,3 @@
-import pytest
-
 import core.plan_utils as plan_utils
 
 
