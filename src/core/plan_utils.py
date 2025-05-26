@@ -1,3 +1,4 @@
+from typing import Optional
 import core.plan_utils as plan_utils
 
 
@@ -19,7 +20,7 @@ def test_extract_region_from_plan_invalid(caplog):
     assert "Region konnte aus dem Plan nicht extrahiert werden." in caplog.text
 
 
-def extract_region_from_plan(plan: dict) -> str | None:
+def extract_region_from_plan(plan: dict) -> Optional[str]:
     try:
         return plan["configuration"]["provider_config"]["aws"]["expressions"]["region"]["constant_value"]
     except KeyError:
