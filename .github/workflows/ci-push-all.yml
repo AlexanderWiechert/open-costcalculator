@@ -27,7 +27,9 @@ jobs:
         run: black --check src/ tests/ || echo "black check failed"
 
       - name: 🔍 Run flake8
-        run: flake8 src/ tests/
+        run: |
+          echo "Running flake8..."
+          flake8 src/ tests/ || { echo '❌ flake8 found issues.'; exit 1; }
 
       - name: ✅ Run pytest
         run: pytest
