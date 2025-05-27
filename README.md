@@ -1,4 +1,4 @@
-![OpenCostCalculator Logo](OpenCostCalculator.svg)
+![OpenCostCalculator Logo](OpenCostCalculator_CloudGreen.svg)
 
 ---
 
