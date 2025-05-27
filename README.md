@@ -1,3 +1,7 @@
+![OpenCostCalculator Logo](OpenCostCalculator.jpeg)
+
+---
+
 # OpenCostCalculator
 
 [![CI](https://github.com/AlexanderWiechert/open-costcalculator/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexanderWiechert/open-costcalculator/actions)
