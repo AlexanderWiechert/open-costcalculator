@@ -136,8 +136,9 @@ Beiträge willkommen! Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Hinweise zu 
 
 ## 📄 Lizenz
 
-**Proprietäre Lizenz – Alle Rechte vorbehalten**  
-Dieses Projekt ist urheberrechtlich geschützt. Für Kooperationen oder kommerzielle Nutzung bitte Kontakt aufnehmen.
+Dieses Projekt steht unter der [Apache License 2.0](LICENSE).
+
+Du darfst den Code verwenden, verändern und weitergeben – unter Einhaltung der Bedingungen der Lizenz.
 
 **Autor:** Alexander Wiechert  
 **E-Mail:** info@elastic2ls.com
