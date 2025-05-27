@@ -1,0 +1,39 @@
+{
+  "resource_changes": [
+    {
+      "type": "aws_lb",
+      "name": "example_lb",
+      "change": {
+        "after": {
+          "load_balancer_type": "application",
+          "internal": false,
+          "name": "example-alb",
+          "idle_timeout": 60
+        }
+      }
+    },
+    {
+      "type": "aws_lb_listener",
+      "name": "example_listener",
+      "change": {
+        "after": {
+          "load_balancer_arn": "aws_lb.example_lb.arn",
+          "port": 80,
+          "protocol": "HTTP"
+        }
+      }
+    },
+    {
+      "type": "aws_lb_target_group",
+      "name": "example_tg",
+      "change": {
+        "after": {
+          "protocol": "HTTP",
+          "target_type": "ip",
+          "port": 80,
+          "health_check_path": "/"
+        }
+      }
+    }
+  ]
+}
