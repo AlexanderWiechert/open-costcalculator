@@ -1,5 +1,86 @@
+# IDEs
 .idea
-venv
-.DS_Store
+.vscode/
+*.swp
+*.swo
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# AWS credentials (safety)
+.aws/
+credentials
+config
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Project specific
+config.yaml.local
+terraform.tfstate*
+*.plan
+*.plan.json
+
+# Documentation builds
+docs/_build/
+site/
