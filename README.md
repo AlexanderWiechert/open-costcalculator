@@ -59,7 +59,7 @@ src/
 ## Current Milestone
 
 **MVP: Analyzer & Config Support (Q3 2025)**  
-🎯 Includes:
+Includes:
 - `config.yaml` support
 - Analyzer: S3, ECS, LB
 - Refactoring: Logging, CLI structure
@@ -67,7 +67,7 @@ src/
 
 See [Project Roadmap](docs/roadmap.md)
 
-## 📦 Installation & Usage
+##  Installation & Usage
 
 ```bash
 # 1. Clone
@@ -129,7 +129,7 @@ repos:
 ## Sample Output
 
 ```text
-📊 Cloud Resource Cost Overview (per month)
+ Cloud Resource Cost Overview (per month)
 | Component        |   Count | Type        | Cost      |
 |------------------|---------|-------------|-----------|
 | Control Plane    |       1 | v1.31       | $73.00000 |
@@ -153,3 +153,38 @@ You are free to use, modify, and distribute the code – as long as you comply w
 
 **Author:** Alexander Wiechert  
 **Email:** info@elastic2ls.com
+
+##  Quickstart
+
+```bash
+git clone https://github.com/AlexanderWiechert/open-costcalculator.git
+cd open-costcalculator
+pip install -r requirements.txt
+
+terraform plan -out=tf.plan
+terraform show -json tf.plan > plan.json
+
+python src/main.py --plan plan.json
+```
+
+Optional: Set AWS credentials via environment or profile.
+
+##  Demo
+
+[![asciicast](https://asciinema.org/a/demo.svg)](https://asciinema.org/a/demo)
+
+*Coming soon: A full demo of OpenCostCalculator in action.*
+
+##  Contributing
+
+Contributions are very welcome! Please open an issue or submit a pull request. For larger changes, feel free to discuss your idea first in a GitHub Issue.
+
+> Planned features and open tasks can be found under [Issues](https://github.com/AlexanderWiechert/open-costcalculator/issues).
+
+##  License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+##  Author
+
+Created and maintained by [Alexander Wiechert](mailto:info@elastic2ls.com)
