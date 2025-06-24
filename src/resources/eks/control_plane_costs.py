@@ -1,6 +1,8 @@
 from datetime import datetime
+
 from core import logger, pricing_defaults
-from resources.eks import eks_pricing_meta, cluster_meta
+from resources.eks import cluster_meta, eks_pricing_meta
+
 
 def calculate_control_plane_cost(release_date, hours):
     if not release_date:
@@ -18,6 +20,7 @@ def calculate_control_plane_cost(release_date, hours):
         logger.warn("Kubernetes-Version wird möglicherweise nicht mehr unterstützt.")
         return 0.0
 
+
 def process_control_plane(plan, hours):
     k8s_version = cluster_meta.extract_version(plan)
     if not k8s_version:
@@ -26,9 +29,4 @@ def process_control_plane(plan, hours):
 
     release_date = eks_pricing_meta.get_release_date(k8s_version)
     cp_cost = round(calculate_control_plane_cost(release_date, hours), 5)
-    return [[
-        "Control Plane",
-        1,
-        f"v{k8s_version}",
-        f"${cp_cost:.5f}"
-    ]], cp_cost
+    return [["Control Plane", 1, f"v{k8s_version}", f"${cp_cost:.5f}"]], cp_cost

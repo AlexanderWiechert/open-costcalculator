@@ -1,5 +1,6 @@
 # filter/rds_meta.py
 
+
 def extract(plan):
     for res in plan.get("resource_changes", []):
         if res.get("type") == "aws_db_instance":

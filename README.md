@@ -1,8 +1,15 @@
+![OpenCostCalculator Logo](OpenCostCalculator_CloudGreen.svg)
+
+---
+
 # OpenCostCalculator
+
+[![CI](https://github.com/AlexanderWiechert/open-costcalculator/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexanderWiechert/open-costcalculator/actions)
+[![License](https://img.shields.io/github/license/AlexanderWiechert/open-costcalculator)](LICENSE)
 
 OpenCostCalculator ist ein modulares Python-Tool zur stunden- und monatsgenauen Kostenanalyse von Terraform-basierten AWS-Infrastrukturen. Es liest Terraform-Pläne (im JSON-Format), extrahiert relevante Ressourceninformationen und ermittelt auf Basis der AWS Pricing API dynamisch die geschätzten Kosten pro Ressource.
 
-## Merkmale
+## 💡 Merkmale
 
 - Analyse von AWS-Ressourcen direkt aus Terraform-Plänen (`terraform plan -out=... | show -json`)
 - Dynamische Preisermittlung via AWS Pricing API und EC2 Spot API
@@ -16,8 +23,11 @@ OpenCostCalculator ist ein modulares Python-Tool zur stunden- und monatsgenauen 
 - Klar formatierte Kostenübersicht als Tabelle
 - Modular aufgebaut: jede AWS-Ressource ist über eigene Module erweiterbar
 - Debug-Logging und erweiterbare Filter-Logik
+- Konfigurierbare Nutzungsannahmen über `config.yaml`
+- Ausgabe als Tabelle, JSON oder YAML
+- CI-Integration mit GitHub Actions
 
-## Projektstruktur
+## 📂 Projektstruktur
 
 ```
 src/
@@ -31,65 +41,90 @@ src/
 │   ├── pricing_utils.py
 │
 ├── resources/
-│   ├── eks/                        # EKS-spezifische Logik
-│   │   ├── cluster_meta.py
-│   │   ├── control_plane_costs.py
-│   │   ├── ec2_filters.py
-│   │   ├── eks_pricing_meta.py
-│   │   ├── fargate_costs.py
-│   │   ├── nodegroup_costs.py
-│   │   ├── nodegroup_meta.py
-│   │
+│   ├── eks/
 │   ├── alb/
-│   │   ├── alb_costs.py
-│   │
 │   ├── nat_gateway/
-│   │   ├── nat_gateway_costs.py
-│   │   ├── nat_gateway_meta.py
-│
 │   ├── rds/
-│   │   ├── rds_costs.py
-│   │   ├── rds_filters.py
-│   │   ├── rds_meta.py
-│   │   ├── rds_utils.py
-│
+│   └── ...
 ├── tests/                          # Unit-Tests
-│   ├── test_logger.py
-│   ├── test_ec2_filters.py
-│   ├── test_pricing_utils.py
-│   ├── ...
 ```
 
-## Voraussetzungen
+## 📌 Aktueller Milestone
 
-- Python 3.10 oder höher
-- AWS-Zugangsdaten via `~/.aws/credentials` oder Umgebungsvariablen
-- Terraform Plan im JSON-Format (`terraform show -json terraform.plan > terraform.plan.json`)
-- Installierte Dependencies:
+**MVP: Analyzer & Config Support (Q3 2025)**  
+🎯 Enthält:
+- `config.yaml` Unterstützung
+- Analyzer: S3, ECS, LB
+- Refactoring: Logging, CLI-Struktur
+- Standardisiertes Reporting
+
+👉 Siehe [Projekt-Roadmap](docs/roadmap.md)
+
+## 📦 Installation & Nutzung
 
 ```bash
+# 1. Klonen
+git clone https://github.com/AlexanderWiechert/open-costcalculator.git
+cd open-costcalculator
+
+# 2. (Optional) virtuelle Umgebung erstellen
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Abhängigkeiten installieren
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# 4. Plan auswerten
+python src/main.py --plan plan/terraform-eks.plan.json --debug
 ```
 
-## Nutzung
+## 🧪 Tests
 
 ```bash
-cd src
-python main.py --plan ../test/terraform-eks.plan.json
+pytest              # Alle Tests ausführen
+pytest -v           # Verbosere Ausgabe
+pytest tests/test_logger.py  # Einzelner Test
+pytest --cov=src --cov-report=term-missing
+pytest --cov=src --cov-report=xml  # Für SonarQube
 ```
 
-Optional mit Debug-Ausgabe:
+## 🖌️ Codequalität lokal prüfen
 
 ```bash
-python main.py --plan ../test/terraform-eks.plan.json --debug
+black --line-length 120 src/ tests/
+isort src/ tests/
+flake8 src/ tests/
 ```
 
-## Beispielausgabe
+### Pre-Commit Setup (optional)
 
+```bash
+pip install pre-commit
+pre-commit install
 ```
+
+`.pre-commit-config.yaml` Beispiel:
+```yaml
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        args: ["--line-length", "120"]
+
+  - repo: https://github.com/pre-commit/mirrors-isort
+    rev: v5.12.0
+    hooks:
+      - id: isort
+```
+
+## 📊 Beispielausgabe
+
+```text
 📊 Cloud Ressourcen Kostenübersicht (pro Monat)
-| Komponente      |   Anzahl | Typ         | Kosten    |
-|-----------------|----------|-------------|-----------|
+| Komponente       |   Anzahl | Typ         | Kosten    |
+|------------------|----------|-------------|-----------|
 | Control Plane    |        1 | v1.31       | $73.00000 |
 | Node Group (EC2) |        2 | t3.medium   | $29.49200 |
 | RDS Instance     |        1 | db.t3.micro | $14.60000 |
@@ -99,43 +134,15 @@ python main.py --plan ../test/terraform-eks.plan.json --debug
 💰 Gesamtkosten/Monat: $195.622
 ```
 
-## Tests
+## 🤝 Mitwirken
 
-Das Projekt enthält Unit-Tests für zentrale Module:
+Beiträge willkommen! Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Hinweise zu Style Guide, Tests und GitHub Flow.
 
-### Ausführen aller Tests
+## 📄 Lizenz
 
-```bash
-pytest
-```
+Dieses Projekt steht unter der [Apache License 2.0](LICENSE).
 
-### Einzelnen Test ausführen
-
-```bash
-pytest tests/test_logger.py
-```
-
-### Coverage Report
-
-```bash
-pytest --cov=src --cov-report=term-missing
-```
-
-Für SonarQube kannst du zusätzlich folgenden Report erzeugen:
-
-```bash
-pytest --cov=src --cov-report=xml
-```
-
-## Lizenz
-
-**Proprietäre Lizenz – Alle Rechte vorbehalten**
-
-Dieses Projekt ist urheberrechtlich geschützt und darf ohne ausdrückliche Genehmigung des Autors nicht kopiert, verbreitet, verändert oder kommerziell genutzt werden. Forks, Klone oder die Nutzung in anderen Projekten sind nicht erlaubt.
-
-Für Kooperationen oder kommerzielle Nutzung bitte Kontakt aufnehmen.
-
----
+Du darfst den Code verwenden, verändern und weitergeben – unter Einhaltung der Bedingungen der Lizenz.
 
 **Autor:** Alexander Wiechert  
 **E-Mail:** info@elastic2ls.com

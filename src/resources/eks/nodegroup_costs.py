@@ -1,9 +1,10 @@
 # resources/eks/nodegroup_costs.py
 
-from core import logger, pricing_utils, duration_meta
+from core import duration_meta, logger, pricing_utils
 from resources.eks import ec2_filters
 
 HOURS_PER_MONTH = duration_meta.HOURS_PER_MONTH
+
 
 def process_node_group(pricing_client, ec2_client, instance_type, desired_size, market_option, region):
     if not instance_type or desired_size <= 0:
