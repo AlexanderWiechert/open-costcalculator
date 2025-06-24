@@ -7,34 +7,41 @@
 [![CI](https://github.com/AlexanderWiechert/open-costcalculator/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexanderWiechert/open-costcalculator/actions)
 [![License](https://img.shields.io/github/license/AlexanderWiechert/open-costcalculator)](LICENSE)
 
-OpenCostCalculator ist ein modulares Python-Tool zur stunden- und monatsgenauen Kostenanalyse von Terraform-basierten AWS-Infrastrukturen. Es liest Terraform-Pläne (im JSON-Format), extrahiert relevante Ressourceninformationen und ermittelt auf Basis der AWS Pricing API dynamisch die geschätzten Kosten pro Ressource.
+**OpenCostCalculator** is a modular Python tool for hourly and monthly cost analysis of Terraform-based AWS infrastructures. It parses Terraform plans (in JSON format), extracts relevant resource data, and dynamically calculates estimated costs per resource using the AWS Pricing API.
 
-## 💡 Merkmale
+## Project Status
+> This project is under active development. Features are experimental and subject to change. Feedback and pull requests are very welcome!
 
-- Analyse von AWS-Ressourcen direkt aus Terraform-Plänen (`terraform plan -out=... | show -json`)
-- Dynamische Preisermittlung via AWS Pricing API und EC2 Spot API
-- Unterstützung für:
-  - EKS Cluster & Node Groups (On-Demand & Spot)
-  - Fargate-Profile
-  - EBS Volumes
-  - NAT Gateways
-  - RDS Instanzen & Storage
-  - ALBs (geschätzte LCU-Nutzung)
-- Klar formatierte Kostenübersicht als Tabelle
-- Modular aufgebaut: jede AWS-Ressource ist über eigene Module erweiterbar
-- Debug-Logging und erweiterbare Filter-Logik
-- Konfigurierbare Nutzungsannahmen über `config.yaml`
-- Ausgabe als Tabelle, JSON oder YAML
-- CI-Integration mit GitHub Actions
 
-## 📂 Projektstruktur
+## Vision
+OpenCostCalculator aims to be a modular, transparent, and extensible CLI tool for cost analysis of Terraform-based cloud infrastructures — with a strong focus on **AWS, clarity, and automation**. It aspires to be an open alternative to proprietary tools like Infracost, designed to integrate seamlessly into existing DevOps workflows.
+
+## Features
+
+- Analyze AWS resources directly from Terraform plans (`terraform plan -out=... | show -json`)
+- Dynamic pricing via AWS Pricing API and EC2 Spot API
+- Support for:
+    - EKS Clusters & Node Groups (On-Demand & Spot)
+    - Fargate Profiles
+    - EBS Volumes
+    - NAT Gateways
+    - RDS Instances & Storage
+    - ALBs (estimated LCU usage)
+- Clearly formatted cost overview as a table
+- Modular design: each AWS resource can be extended via dedicated modules
+- Debug logging and extendable filtering logic
+- Configurable usage assumptions via `config.yaml`
+- Output as table, JSON, or YAML
+- CI integration using GitHub Actions
+
+## Project Structure
 
 ```
 src/
 │
-├── main.py                         # Einstiegspunkt des Tools
+├── main.py                         # Entry point of the tool
 │
-├── core/                           # Gemeinsame Logik (Argumente, Logging, Preise)
+├── core/                           # Shared logic (args, logging, pricing)
 │   ├── arg_utils.py
 │   ├── duration_meta.py
 │   ├── logger.py
@@ -46,50 +53,50 @@ src/
 │   ├── nat_gateway/
 │   ├── rds/
 │   └── ...
-├── tests/                          # Unit-Tests
+├── tests/                          # Unit tests
 ```
 
-## 📌 Aktueller Milestone
+## Current Milestone
 
 **MVP: Analyzer & Config Support (Q3 2025)**  
-🎯 Enthält:
-- `config.yaml` Unterstützung
+🎯 Includes:
+- `config.yaml` support
 - Analyzer: S3, ECS, LB
-- Refactoring: Logging, CLI-Struktur
-- Standardisiertes Reporting
+- Refactoring: Logging, CLI structure
+- Standardized reporting
 
-👉 Siehe [Projekt-Roadmap](docs/roadmap.md)
+See [Project Roadmap](docs/roadmap.md)
 
-## 📦 Installation & Nutzung
+## 📦 Installation & Usage
 
 ```bash
-# 1. Klonen
+# 1. Clone
 git clone https://github.com/AlexanderWiechert/open-costcalculator.git
 cd open-costcalculator
 
-# 2. (Optional) virtuelle Umgebung erstellen
+# 2. (Optional) create virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 3. Abhängigkeiten installieren
+# 3. Install dependencies
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
-# 4. Plan auswerten
+# 4. Run cost analysis
 python src/main.py --plan plan/terraform-eks.plan.json --debug
 ```
 
-## 🧪 Tests
+## Tests
 
 ```bash
-pytest              # Alle Tests ausführen
-pytest -v           # Verbosere Ausgabe
-pytest tests/test_logger.py  # Einzelner Test
+pytest              # Run all tests
+pytest -v           # Verbose output
+pytest tests/test_logger.py  # Run specific test
 pytest --cov=src --cov-report=term-missing
-pytest --cov=src --cov-report=xml  # Für SonarQube
+pytest --cov=src --cov-report=xml  # For SonarQube
 ```
 
-## 🖌️ Codequalität lokal prüfen
+## Check code quality locally
 
 ```bash
 black --line-length 120 src/ tests/
@@ -97,14 +104,14 @@ isort src/ tests/
 flake8 src/ tests/
 ```
 
-### Pre-Commit Setup (optional)
+### Pre-commit setup (optional)
 
 ```bash
 pip install pre-commit
 pre-commit install
 ```
 
-`.pre-commit-config.yaml` Beispiel:
+`.pre-commit-config.yaml` example:
 ```yaml
 repos:
   - repo: https://github.com/psf/black
@@ -119,30 +126,30 @@ repos:
       - id: isort
 ```
 
-## 📊 Beispielausgabe
+## Sample Output
 
 ```text
-📊 Cloud Ressourcen Kostenübersicht (pro Monat)
-| Komponente       |   Anzahl | Typ         | Kosten    |
-|------------------|----------|-------------|-----------|
-| Control Plane    |        1 | v1.31       | $73.00000 |
-| Node Group (EC2) |        2 | t3.medium   | $29.49200 |
-| RDS Instance     |        1 | db.t3.micro | $14.60000 |
-| RDS Storage      |       10 | gp2         | $1.15000  |
-| NAT Gateway      |        1 | Standard    | $32.85000 |
-| ALB (geschätzt)  |        2 | 1.0 LCU     | $44.53000 |
-💰 Gesamtkosten/Monat: $195.622
+📊 Cloud Resource Cost Overview (per month)
+| Component        |   Count | Type        | Cost      |
+|------------------|---------|-------------|-----------|
+| Control Plane    |       1 | v1.31       | $73.00000 |
+| Node Group (EC2) |       2 | t3.medium   | $29.49200 |
+| RDS Instance     |       1 | db.t3.micro | $14.60000 |
+| RDS Storage      |      10 | gp2         | $1.15000  |
+| NAT Gateway      |       1 | Standard    | $32.85000 |
+| ALB (estimated)  |       2 | 1.0 LCU     | $44.53000 |
+ Total Monthly Cost: $195.622
 ```
 
-## 🤝 Mitwirken
+## Contributing
 
-Beiträge willkommen! Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für Hinweise zu Style Guide, Tests und GitHub Flow.
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for style guide, testing, and GitHub Flow information.
 
-## 📄 Lizenz
+## License
 
-Dieses Projekt steht unter der [Apache License 2.0](LICENSE).
+This project is licensed under the [Apache License 2.0](LICENSE).
 
-Du darfst den Code verwenden, verändern und weitergeben – unter Einhaltung der Bedingungen der Lizenz.
+You are free to use, modify, and distribute the code – as long as you comply with the license terms.
 
-**Autor:** Alexander Wiechert  
-**E-Mail:** info@elastic2ls.com
+**Author:** Alexander Wiechert  
+**Email:** info@elastic2ls.com
