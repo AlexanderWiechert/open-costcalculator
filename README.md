@@ -59,6 +59,7 @@ src/
 ## Current Milestone
 
 **MVP: Analyzer & Config Support (Q3 2025)**  
+
 Includes:
 - `config.yaml` support
 - Analyzer: S3, ECS, LB
@@ -67,7 +68,8 @@ Includes:
 
 See [Project Roadmap](docs/roadmap.md)
 
-##  Installation & Usage
+## 📦 Installation & Usage
+
 
 ```bash
 # 1. Clone
@@ -129,7 +131,8 @@ repos:
 ## Sample Output
 
 ```text
- Cloud Resource Cost Overview (per month)
+📊 Cloud Resource Cost Overview (per month)
+
 | Component        |   Count | Type        | Cost      |
 |------------------|---------|-------------|-----------|
 | Control Plane    |       1 | v1.31       | $73.00000 |
@@ -188,3 +191,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ##  Author
 
 Created and maintained by [Alexander Wiechert](mailto:info@elastic2ls.com)
+
