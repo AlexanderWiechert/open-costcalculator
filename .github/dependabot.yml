@@ -3,8 +3,8 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "daily"
+    open-pull-requests-limit: 10
     rebase-strategy: "auto"
     allow:
       - dependency-type: "all"
@@ -12,4 +12,4 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
